@@ -1,0 +1,55 @@
+name: ARCA RH integration
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: arca-rh-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      COMPOSE_PARALLEL_LIMIT: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - name: Create isolated secrets
+        run: node scripts/create-ci-env.mjs
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate clients and check types
+        run: pnpm generate && pnpm check
+      - name: Validate and build actual images serially
+        run: docker compose config --quiet && docker compose build identity-service web
+      - name: Start complete deployment
+        run: docker compose -f compose.yaml -f compose.dev.yaml up -d --no-build --wait --wait-timeout 180
+      - name: Real HTTP and PostgreSQL integration
+        env:
+          API_BASE: http://localhost:3000/api/v1/
+          DIRECT_PERSONNEL_URL: ''
+          DOCKER_FIXTURE_DOCUMENTS: 'true'
+        run: pnpm test
+      - name: Check private infrastructure and SQL isolation
+        env:
+          ALLOW_DEV_DATABASE_PORT: 'true'
+        run: node scripts/check-infra.mjs
+      - name: Non-empty recovery fixture
+        run: node --env-file=.env scripts/test-recovery.mjs
+      - name: Backup and isolated restore
+        run: |
+          node scripts/backup.mjs .runtime/ci-snapshot
+          node --env-file=.env scripts/restore-check.mjs .runtime/ci-snapshot
+      - name: Deployment state
+        if: always()
+        run: docker compose ps
+      - name: Stop ephemeral runner deployment
+        if: always()
+        run: docker compose stop

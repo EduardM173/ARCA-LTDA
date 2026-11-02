@@ -1,0 +1,8 @@
+import PDFDocument from 'pdfkit';import {mkdir,writeFile,rename,readFile,unlink} from 'node:fs/promises';import {join} from 'node:path';import {createHash,randomUUID} from 'node:crypto';
+export const directory=process.env.DOCUMENTS_DIR||join(process.cwd(),'.runtime/documents',process.env.SERVICE||'local');
+export async function generatePdf(id:string,title:string,lines:string[]){
+ await mkdir(directory,{recursive:true});const doc=new PDFDocument({size:'A4',margin:56});const chunks:Buffer[]=[];const done=new Promise<Buffer>((resolve,reject)=>{doc.on('data',c=>chunks.push(c));doc.on('end',()=>resolve(Buffer.concat(chunks)));doc.on('error',reject)});
+ doc.font('Helvetica-Bold').fontSize(24).fillColor('#163d38').text('ARCA RH');doc.moveDown().fontSize(18).text(title);doc.moveDown();doc.font('Helvetica').fontSize(11).fillColor('#172d2a');for(const line of lines)doc.text(line,{lineGap:7});doc.moveDown().fontSize(9).text('Documento administrativo. No acredita firma electrónica ni validación legal.');doc.end();
+ const bytes=await done;if(!bytes.subarray(0,5).equals(Buffer.from('%PDF-')))throw new Error('Invalid PDF');const temp=join(directory,randomUUID()+'.tmp');const target=join(directory,id+'.pdf');try{await writeFile(temp,bytes,{flag:'wx'});await rename(temp,target);const stored=await readFile(target);if(!stored.equals(bytes))throw new Error('PDF integrity');return createHash('sha256').update(stored).digest('hex')}finally{await unlink(temp).catch(()=>{})}
+}
+export async function readPdf(id:string,expected:string){const data=await readFile(join(directory,id+'.pdf'));if(createHash('sha256').update(data).digest('hex')!==expected)throw new Error('PDF integrity');return data}

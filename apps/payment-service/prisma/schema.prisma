@@ -1,0 +1,64 @@
+generator client {
+ provider = "prisma-client-js"
+ output = "../generated/client"
+ binaryTargets = ["native"]
+}
+datasource db {
+ provider = "postgresql"
+ url = env("PAYMENT_DATABASE_URL")
+}
+model Payment {
+ id String @id @default(uuid()) @db.Uuid
+ employeeId String @db.Uuid
+ period String
+ currency String
+ base Decimal @db.Decimal(14,2)
+ earnings Decimal @db.Decimal(14,2)
+ deductions Decimal @db.Decimal(14,2)
+ net Decimal @db.Decimal(14,2)
+ lines Json
+ snapshot Json
+ status String @default("BORRADOR")
+ createdBy String
+ fileHash String?
+ paymentDate DateTime? @db.Date
+ paymentReference String?
+ evidence String?
+ paymentMode String?
+ paidBy String?
+ version Int @default(1)
+ revisionOf String? @db.Uuid
+ revision Int @default(0)
+ voidReason String?
+ updatedAt DateTime @updatedAt @db.Timestamptz
+ createdAt DateTime @default(now()) @db.Timestamptz
+ @@unique([employeeId,period,revision])
+}
+
+model Concept {
+ id String @id @default(uuid()) @db.Uuid
+ name String @unique
+ type String
+ active Boolean @default(true)
+ createdAt DateTime @default(now()) @db.Timestamptz
+}
+
+model PaymentAudit {
+ id String @id @default(uuid()) @db.Uuid
+ paymentId String?
+ actor String
+ action String
+ data Json
+ requestId String?
+ createdAt DateTime @default(now()) @db.Timestamptz
+ @@index([paymentId,createdAt])
+}
+
+model PaymentPolicy {
+ id String @id @default(uuid()) @db.Uuid
+ allowVoid Boolean
+ allowCorrections Boolean
+ reason String
+ approvedBy String
+ approvedAt DateTime @default(now()) @db.Timestamptz
+}

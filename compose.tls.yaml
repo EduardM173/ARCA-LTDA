@@ -1,0 +1,25 @@
+# Optional local HTTPS verification. Certificate stays outside version control.
+services:
+  identity-service:
+    environment:
+      APP_PUBLIC_URL: https://localhost:5181
+  personnel-service:
+    environment:
+      APP_PUBLIC_URL: https://localhost:5181
+  vacation-service:
+    environment:
+      APP_PUBLIC_URL: https://localhost:5181
+  contract-service:
+    environment:
+      APP_PUBLIC_URL: https://localhost:5181
+  payment-service:
+    environment:
+      APP_PUBLIC_URL: https://localhost:5181
+  api-gateway:
+    environment:
+      APP_PUBLIC_URL: https://localhost:5181
+  web:
+    ports: !override ["127.0.0.1:5181:8443"]
+    volumes:
+      - ./.runtime/tls:/etc/nginx/tls:ro
+      - ./infra/nginx-tls.conf:/etc/nginx/conf.d/default.conf:ro

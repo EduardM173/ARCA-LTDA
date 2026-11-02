@@ -1,0 +1,203 @@
+name: arca-rh
+x-backend: &backend
+  image: arca-rh-backend:local
+  build:
+    context: .
+  init: true
+  restart: unless-stopped
+  stop_grace_period: 15s
+  security_opt: [no-new-privileges:true]
+  read_only: true
+  tmpfs: [/tmp]
+services:
+  postgres:
+    image: postgres:18-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
+    environment:
+      BIND_HOST: 0.0.0.0
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Configure .env}
+      POSTGRES_USER: arca_root
+      IDENTITY_DB_PASSWORD: ${IDENTITY_DB_PASSWORD:?Configure .env}
+      PERSONNEL_DB_PASSWORD: ${PERSONNEL_DB_PASSWORD:?Configure .env}
+      VACATION_DB_PASSWORD: ${VACATION_DB_PASSWORD:?Configure .env}
+      CONTRACT_DB_PASSWORD: ${CONTRACT_DB_PASSWORD:?Configure .env}
+      PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?Configure .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql
+      - ./infra/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U arca_root -d postgres]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [private]
+  identity-service:
+    <<: *backend
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 6
+    environment:
+      SERVICE: identity-service
+      BIND_HOST: 0.0.0.0
+      IDENTITY_DATABASE_URL: postgresql://arca_identity:${IDENTITY_DB_PASSWORD}@postgres:5432/arca_identity?schema=public
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:5173}
+      GATEWAY_PUBLIC_KEY: ${GATEWAY_PUBLIC_KEY}
+      VACATION_KEY: ${VACATION_KEY}
+      MAIL_ENCRYPTION_KEY: ${MAIL_ENCRYPTION_KEY}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM: ${SMTP_FROM}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [private]
+  personnel-service:
+    <<: *backend
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3002/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 6
+    environment:
+      SERVICE: personnel-service
+      BIND_HOST: 0.0.0.0
+      PERSONNEL_DATABASE_URL: postgresql://arca_personnel:${PERSONNEL_DB_PASSWORD}@postgres:5432/arca_personnel?schema=public
+      VACATION_URL: http://vacation-service:3003
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:5173}
+      GATEWAY_PUBLIC_KEY: ${GATEWAY_PUBLIC_KEY}
+      PERSONNEL_KEY: ${PERSONNEL_KEY}
+      VACATION_KEY: ${VACATION_KEY}
+      CONTRACT_KEY: ${CONTRACT_KEY}
+      PAYMENT_KEY: ${PAYMENT_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [private]
+  vacation-service:
+    <<: *backend
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3003/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 6
+    environment:
+      SERVICE: vacation-service
+      BIND_HOST: 0.0.0.0
+      VACATION_DATABASE_URL: postgresql://arca_vacation:${VACATION_DB_PASSWORD}@postgres:5432/arca_vacation?schema=public
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:5173}
+      GATEWAY_PUBLIC_KEY: ${GATEWAY_PUBLIC_KEY}
+      PERSONNEL_KEY: ${PERSONNEL_KEY}
+      VACATION_KEY: ${VACATION_KEY}
+      PERSONNEL_URL: http://personnel-service:3002
+      IDENTITY_URL: http://identity-service:3001
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [private]
+  contract-service:
+    <<: *backend
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3004/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 6
+    environment:
+      SERVICE: contract-service
+      BIND_HOST: 0.0.0.0
+      CONTRACT_DATABASE_URL: postgresql://arca_contract:${CONTRACT_DB_PASSWORD}@postgres:5432/arca_contract?schema=public
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:5173}
+      GATEWAY_PUBLIC_KEY: ${GATEWAY_PUBLIC_KEY}
+      CONTRACT_KEY: ${CONTRACT_KEY}
+      PERSONNEL_URL: http://personnel-service:3002
+      IDENTITY_URL: http://identity-service:3001
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [private]
+    volumes: [contract-documents:/app/.runtime/documents]
+  payment-service:
+    <<: *backend
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3005/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 6
+    environment:
+      SERVICE: payment-service
+      BIND_HOST: 0.0.0.0
+      PAYMENT_DATABASE_URL: postgresql://arca_payment:${PAYMENT_DB_PASSWORD}@postgres:5432/arca_payment?schema=public
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:5173}
+      GATEWAY_PUBLIC_KEY: ${GATEWAY_PUBLIC_KEY}
+      PAYMENT_KEY: ${PAYMENT_KEY}
+      PERSONNEL_URL: http://personnel-service:3002
+      IDENTITY_URL: http://identity-service:3001
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [private]
+    volumes: [payment-documents:/app/.runtime/documents]
+  api-gateway:
+    <<: *backend
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/v1/auth/me').then(r=>process.exit(r.status===401?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 6
+    environment:
+      SERVICE: api-gateway
+      GATEWAY_PRIVATE_KEY: ${GATEWAY_PRIVATE_KEY}
+      BIND_HOST: 0.0.0.0
+      GATEWAY_PUBLIC_KEY: ${GATEWAY_PUBLIC_KEY}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:5173}
+      IDENTITY_URL: http://identity-service:3001
+      PERSONNEL_URL: http://personnel-service:3002
+      VACATION_URL: http://vacation-service:3003
+      CONTRACT_URL: http://contract-service:3004
+      PAYMENT_URL: http://payment-service:3005
+    depends_on:
+      identity-service:
+        condition: service_healthy
+      personnel-service:
+        condition: service_healthy
+      vacation-service:
+        condition: service_healthy
+      contract-service:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+    networks: [private]
+    ports: ["127.0.0.1:${GATEWAY_HOST_PORT:-3000}:3000"]
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports: ["127.0.0.1:${WEB_HOST_PORT:-5173}:8080"]
+    init: true
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: [/tmp]
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, --spider, http://127.0.0.1:8080/health]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    networks: [private]
+networks:
+  private:
+volumes:
+  postgres-data:
+  contract-documents:
+  payment-documents:

@@ -1,0 +1,81 @@
+generator client {
+ provider = "prisma-client-js"
+ output = "../generated/client"
+ binaryTargets = ["native"]
+}
+datasource db {
+ provider = "postgresql"
+ url = env("PERSONNEL_DATABASE_URL")
+}
+model Department {
+ id String @id @default(uuid()) @db.Uuid
+ name String @unique
+ active Boolean @default(true)
+ employees Employee[]
+}
+model Position {
+ id String @id @default(uuid()) @db.Uuid
+ name String @unique
+ active Boolean @default(true)
+ employees Employee[]
+}
+model Employee {
+ id String @id @default(uuid()) @db.Uuid
+ code String @unique
+ name String
+ document String? @unique
+ email String?
+ hiredAt DateTime @db.Date
+ ratifiedAt DateTime? @db.Date
+ status String @default("ACTIVO")
+ terminatedAt DateTime? @db.Date
+ terminationReason String?
+ departmentId String @db.Uuid
+ department Department @relation(fields: [departmentId], references: [id])
+ positionId String @db.Uuid
+ position Position @relation(fields: [positionId], references: [id])
+ currency String
+ version Int @default(1)
+ salaries Salary[]
+ periods EmploymentPeriod[]
+ events EmploymentEvent[]
+ createdAt DateTime @default(now()) @db.Timestamptz
+}
+model Salary {
+ id String @id @default(uuid()) @db.Uuid
+ employeeId String @db.Uuid
+ employee Employee @relation(fields: [employeeId], references: [id])
+ amount Decimal @db.Decimal(14,2)
+ effectiveAt DateTime @db.Date
+ actor String
+ @@unique([employeeId, effectiveAt])
+}
+model EmploymentEvent {
+ id String @id @default(uuid()) @db.Uuid
+ employeeId String @db.Uuid
+ employee Employee @relation(fields: [employeeId], references: [id])
+ action String
+ actor String
+ data Json
+ createdAt DateTime @default(now()) @db.Timestamptz
+ requestId String?
+ @@index([requestId])
+}
+
+model PersonnelPolicy {
+ id String @id @default(uuid())
+ allowRetroactiveSalary Boolean
+ allowReentry Boolean
+ reentryTenure String
+ compensationPoint String
+ approvedBy String
+ approvedAt DateTime @default(now()) @db.Timestamptz
+}
+model EmploymentPeriod {
+ id String @id @default(uuid())
+ employeeId String @db.Uuid
+ employee Employee @relation(fields:[employeeId],references:[id])
+ startsAt DateTime @db.Date
+ endsAt DateTime? @db.Date
+ actor String
+}

@@ -1,0 +1,81 @@
+generator client {
+ provider = "prisma-client-js"
+ output = "../generated/client"
+ binaryTargets = ["native"]
+}
+datasource db {
+ provider = "postgresql"
+ url = env("VACATION_DATABASE_URL")
+}
+model Policy {
+ id String @id @default(uuid())
+ reservePending Boolean @default(false)
+ leapDay String @default("PENDING")
+ cancelPending Boolean @default(false)
+ cancelApproved Boolean @default(false)
+ counting String
+ carryover Boolean
+ holidays String[]
+ approvedBy String
+ approvedAt DateTime @default(now()) @db.Timestamptz
+}
+model LeaveRequest {
+ id String @id @default(uuid()) @db.Uuid
+ tenureKey String @default("legacy")
+ requestKey String? @unique
+ departmentId String? @db.Uuid
+ version Int @default(1)
+ employeeId String @db.Uuid
+ startsAt DateTime @db.Date
+ endsAt DateTime @db.Date
+ days Int
+ status String @default("PENDIENTE")
+ createdBy String
+ decidedBy String?
+ reason String?
+ policyId String
+ createdAt DateTime @default(now()) @db.Timestamptz
+}
+model Outbox {
+ id String @id @default(uuid())
+ requestId String
+ event String
+ state String @default("PENDIENTE")
+ attempts Int @default(0)
+ lastError String?
+ nextAttemptAt DateTime @default(now()) @db.Timestamptz
+ @@unique([requestId,event])
+}
+
+model Entitlement {
+ id String @id @default(uuid())
+ tenureKey String @default("legacy")
+ employeeId String @db.Uuid
+ serviceYear Int
+ cycleStart DateTime @db.Date
+ granted Int @default(15)
+ policyId String
+ @@unique([employeeId,tenureKey,serviceYear])
+}
+model Movement {
+ id String @id @default(uuid())
+ tenureKey String @default("legacy")
+ employeeId String @db.Uuid
+ requestId String @db.Uuid
+ serviceYear Int
+ days Int
+ kind String
+ actor String
+ createdAt DateTime @default(now()) @db.Timestamptz
+ @@unique([requestId,serviceYear,kind])
+}
+model VacationAudit {
+ id String @id @default(uuid())
+ resource String
+ employeeId String? @db.Uuid
+ actor String
+ action String
+ createdAt DateTime @default(now()) @db.Timestamptz
+ requestId String?
+ @@index([requestId])
+}

@@ -1,0 +1,68 @@
+generator client {
+ provider = "prisma-client-js"
+ output = "../generated/client"
+ binaryTargets = ["native"]
+}
+datasource db {
+ provider = "postgresql"
+ url = env("IDENTITY_DATABASE_URL")
+}
+model User {
+ id String @id @default(uuid()) @db.Uuid
+ email String @unique
+ passwordHash String
+ roles String[]
+ permissions String[] @default([])
+ scopeAll Boolean @default(false)
+ departmentIds String[] @default([])
+ verifiedAt DateTime? @db.Timestamptz
+ authVersion Int @default(1)
+ active Boolean @default(true)
+ createdAt DateTime @default(now()) @db.Timestamptz
+ sessions Session[]
+ resets PasswordReset[]
+}
+model Session {
+ id String @id
+ authVersion Int @default(1)
+ userId String @db.Uuid
+ user User @relation(fields: [userId], references: [id])
+ expiresAt DateTime @db.Timestamptz
+}
+model PasswordReset {
+ id String @id
+ userId String @db.Uuid
+ user User @relation(fields: [userId], references: [id])
+ expiresAt DateTime @db.Timestamptz
+ usedAt DateTime? @db.Timestamptz
+}
+model Audit {
+ id String @id @default(uuid())
+ actor String
+ action String
+ resource String
+ createdAt DateTime @default(now()) @db.Timestamptz
+ requestId String?
+ @@index([requestId])
+}
+
+model EmailVerification {
+ id String @id
+ userId String @db.Uuid
+ email String
+ expiresAt DateTime @db.Timestamptz
+ usedAt DateTime? @db.Timestamptz
+}
+model MailDelivery {
+ id String @id @default(uuid())
+ key String @unique
+ recipientId String @db.Uuid
+ encryptedPayload String
+ status String @default("PENDIENTE")
+ attempts Int @default(0)
+ nextAttemptAt DateTime @default(now()) @db.Timestamptz
+ leaseUntil DateTime? @db.Timestamptz
+ acceptedAt DateTime? @db.Timestamptz
+ lastError String?
+ createdAt DateTime @default(now()) @db.Timestamptz
+}

@@ -1,0 +1,53 @@
+generator client {
+ provider = "prisma-client-js"
+ output = "../generated/client"
+ binaryTargets = ["native"]
+}
+datasource db {
+ provider = "postgresql"
+ url = env("CONTRACT_DATABASE_URL")
+}
+model Template {
+ id String @id @default(uuid()) @db.Uuid
+ name String
+ version Int
+ body String
+ active Boolean @default(true)
+ @@unique([name,version])
+}
+model Contract {
+ id String @id @default(uuid()) @db.Uuid
+ employeeId String @db.Uuid
+ templateId String @db.Uuid
+ probationDays Int
+ snapshot Json
+ status String @default("BORRADOR")
+ createdBy String
+ fileHash String?
+ version Int @default(1)
+ requestKey String?
+ originalId String? @db.Uuid
+ issuedAt DateTime? @db.Timestamptz
+ updatedAt DateTime @updatedAt @db.Timestamptz
+ createdAt DateTime @default(now()) @db.Timestamptz
+ @@unique([createdBy,requestKey])
+ @@index([employeeId,status,createdAt])
+}
+model ContractAudit {
+ id String @id @default(uuid()) @db.Uuid
+ resourceId String
+ action String
+ actorId String
+ requestId String?
+ details Json
+ createdAt DateTime @default(now()) @db.Timestamptz
+ @@index([resourceId,createdAt])
+}
+model ContractPolicy {
+ id String @id @default(uuid()) @db.Uuid
+ allowVoid Boolean
+ allowRectification Boolean
+ rationale String
+ approvedBy String
+ approvedAt DateTime @default(now()) @db.Timestamptz
+}
