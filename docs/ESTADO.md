@@ -1,5 +1,7 @@
 # ARCA RH · evidencia al cierre técnico del 02/11/2026
 
+Actualización de alcance del 02/11/2026: se registró en `docs/POLITICA_DEMOSTRACION.md` la propuesta de ensayo recibida. La inspección focalizada de `apps/vacation-service/src/main.ts` y `apps/personnel-service/src/main.ts` confirmó dos brechas: el cómputo hábil usa lunes a viernes fijos, sin horario configurable, y la vigencia salarial retroactiva no exige motivo individual; el cambio retroactivo de área/cargo se rechaza. No se activó ninguna política como aprobada. La medición previa a trabajo pesado indicó 26,80/29,14 GB de memoria comprometida (92,3 %); se posponen builds y pruebas pesadas según `AGENTS.md`, sin detener aplicaciones ajenas ni cambiar paginación de Windows.
+
 Sistema integrado ejecutándose en http://localhost:5173 mediante Docker Compose. Los ocho servicios están saludables. Este registro distingue implementación/pruebas técnicas de aprobación institucional y revisión humana.
 
 ## Comprobado sobre las imágenes actuales

@@ -13,9 +13,9 @@ Fuentes: MASTER7.0 preservado en raíz, ampliación7.1 SMTP y solicitudes expres
 | SMTP/propiedad correo | TLS, verificaciónlink, outboxcifrada/leases/reintentos | Gmailaceptó y usuario confirmórecepción de flujos reales |
 | Recuperación | Hash de token/unuso/caducidad, sesionesrevocadas | SMTP+consumoAPI, expiry/reuso/concurrenciaPASS |
 | Personal | Altas, catálogos, cambios/versiones, periodos/historial, ratificación/baja | DB/HTTP y E2E PersonalPASS |
-| Reingreso/retroactividad | Mecanismo bajo política aprobada, sin borrar historia/PDF | E2E reingreso conpolítica sintéticaPASS; políticaoperativapendientehumana |
+| Reingreso/retroactividad | Reingreso con expediente y periodo nuevo bajo política; salario retroactivo permitido bajo política | E2E reingreso con política sintética PASS. Propuesta de ensayo pendiente; salario retroactivo aún no exige motivo individual y asignación retroactiva se rechaza. |
 | Vacaciones |15días/gestión, ratificación, ledgerportenencia, saldo/reservas, solapamientos | Concurrencia, aprobación/rechazo, UIhistorial/débito2PASS |
-| Políticas variables | Calendario/hábiles/feriados, arrastre, reserva, aniversario29/02/cancelación | Configuraciónversionada/aprobable; no se inventa normativaoficial |
+| Políticas variables | Calendario o lunes a viernes con feriados, arrastre, reserva, aniversario 29/02 y cancelación | La propuesta solicita horario laborable configurable: pendiente de implementación. Arrastre y aniversario requieren decisión académica; no se inventa normativa oficial. |
 | Avisos vacaciones | Pendientealaprobador, decisionesalcreador; revalidación permisos |4envíosSMTP reales + recepciónconfirmada, flujonegocioAPIreal |
 | Contratos | Plantillasversionadas, borradoreseditables, preview, snapshot, PDF privado | PruebasAPI/fallosfilesystem/reintentos y E2E navegadorPASS |
 | Emisiones interrumpidas | Lock/transacción, reconciliaciónEMITIENDO, hash y estados coherentes | Casosfocalizados Contratos/PagosPASS; no falso EMITIDO |
@@ -28,6 +28,6 @@ Fuentes: MASTER7.0 preservado en raíz, ampliación7.1 SMTP y solicitudes expres
 | HTTPS/despliegue | Composecanónico y overlayTLSlocal | CookieSecure/HttpOnly/Strict +no-store observado;8healthyfinal |
 | CI y reproducibilidad | Lockfile, scriptsbootstrap/migración/health/recovery, workflowGitHub | Pasosequivalenteslocales comprobados; ejecuciónremotaGitHub noafirmada |
 | Usabilidad por tercero | Recorridos disponibles | PENDIENTEpersona ajenaaldesarrollo; no sustituible porSelenium |
-| Aprobación institucional | UIpermite registrar decisiones y concesiones | PENDIENTEdueñodenegocio; fixtureseliminados nodecidenpolítica |
+| Aprobación institucional | UI permite registrar decisiones y concesiones | PENDIENTE equipo académico/dueño de negocio. La propuesta del 02/11/2026 está documentada en POLITICA_DEMOSTRACION.md, sin activar políticas ni concesiones. |
 
 Comandos/evidencia detallados en ESTADO y documentos de cada dominio. Sinpush; autor local recuperado de la configuración existente de algorithm (EduardM173); configuración global preservada.

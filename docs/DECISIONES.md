@@ -1,5 +1,7 @@
 # Decisiones institucionales pendientes
 
+El usuario entregó una [propuesta operativa de demostración](POLITICA_DEMOSTRACION.md) el 02/11/2026. Sigue pendiente de aprobación del equipo académico; no se registró como política aprobada en la aplicación. La propuesta define el sentido de varias reglas, pero deja sin fijar horario semanal, arrastre, aniversario del 29 de febrero y criterio de remuneración de un mes con varias vigencias.
+
 | Tema | Implementación disponible | Responsable de aprobación | Estado |
 |---|---|---|---|
 | Días de vacaciones | Calendario o lunes-viernes, feriados explícitos | Dueño de RR. HH./docente | Pendiente; se aprueba en UI |
