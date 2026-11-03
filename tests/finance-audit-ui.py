@@ -28,6 +28,12 @@ try:
     browser.find_element(By.XPATH, '//nav//button[contains(.,"Administración")]').click()
     wait.until(lambda d: 'Auditoría por dominio' in d.page_source)
     assert browser.find_element(By.XPATH, '//label[contains(.,"Dominio")]/select').get_attribute('value') == 'payments'
+    actor = browser.find_element(By.XPATH, '//label[contains(.,"Actor (ID)")]/input')
+    actor.send_keys('incompleto')
+    wait.until(lambda d: 'Complete el ID del actor' in d.page_source)
+    actor.clear()
+    actor.send_keys(' ')
+    wait.until(lambda d: actor.get_attribute('value') == '' and 'Complete el ID del actor' not in d.find_element(By.TAG_NAME, 'body').text)
     assert 'Usuarios y permisos' not in browser.page_source
     assert 'Catálogos' not in browser.page_source
     assert 'Servicio no disponible' not in browser.page_source

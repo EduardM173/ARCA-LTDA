@@ -30,6 +30,17 @@ try:
         wait.until(lambda d: 'eventos · página' in d.page_source)
         assert 'Servicio no disponible' not in browser.page_source
         print(value, 'audit UI PASS')
+    Select(browser.find_element(By.XPATH, '//label[contains(.,"Dominio")]/select')).select_by_value('users')
+    actor_button = wait.until(lambda d: d.find_element(By.XPATH, '//button[normalize-space()="Filtrar por este actor"]'))
+    actor_button.click()
+    actor_input = browser.find_element(By.XPATH, '//label[contains(.,"Actor (ID)")]/input')
+    assert len(actor_input.get_attribute('value')) == 36
+    wait.until(lambda d: 'eventos · página' in d.page_source and 'Complete el ID del actor' not in d.page_source)
+    actor_input.clear()
+    actor_input.send_keys('incorrecto')
+    wait.until(lambda d: 'Complete el ID del actor' in d.page_source)
+    actor_input.clear()
+    print('actor audit filter UI PASS')
     browser.find_element(By.XPATH, '//nav//button[contains(.,"Vacaciones")]').click()
     browser.find_element(By.XPATH, '//button[contains(.,"Revisar configuración")]').click()
     wait.until(lambda d: 'Días laborables del horario semanal' in d.page_source)
