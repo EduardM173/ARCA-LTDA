@@ -17,6 +17,10 @@ try:
     browser.find_element(By.CSS_SELECTOR, 'input[name=password]').send_keys(os.environ['ARCA_FIXTURE_PASSWORD'])
     browser.find_element(By.CSS_SELECTOR, 'button.primary').click()
     wait.until(lambda d: 'Cerrar sesión' in d.page_source)
+    month = browser.execute_script("return new Intl.DateTimeFormat('sv-SE',{timeZone:'America/La_Paz'}).format(new Date()).slice(0,7)")
+    wait.until(lambda d: d.execute_script('return performance.getEntriesByType("resource").some(e=>e.name.includes("payments/summary?period="+arguments[0]))', month))
+    assert month in browser.find_element(By.CSS_SELECTOR, '.stats').text
+    print('Finance current-period summary UI PASS')
     assert not browser.find_elements(By.XPATH, '//nav//button[contains(.,"Personal")]')
     assert browser.find_elements(By.XPATH, '//nav//button[contains(.,"Boletas")]')
     browser.find_element(By.XPATH, '//nav//button[contains(.,"Boletas")]').click()
