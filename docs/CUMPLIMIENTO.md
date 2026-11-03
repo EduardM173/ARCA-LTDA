@@ -24,7 +24,7 @@ Fuentes: MASTER7.0 preservado en raíz, ampliación7.1 SMTP y solicitudes expres
 | Rectificación/anulación | Versiones vinculadas, original conservado, política explícita | PruebasfocalizadasPASS; aprobaciónoperativa a cargoresponsable |
 | IndicadoresDirectorio | Agregados por dominio/estado y boletas del mes de negocio de La Paz, sin salarios individuales; hora de consulta por tarjeta | Summary API/Board negativos; Selenium verificó periodo actual, hora de consulta y «No disponible» sin cero ni hora anterior durante caída real de Pagos, seguido de recuperación |
 | Auditoría | Actor/acción/recurso/instante y requestId propagado, consulta paginada por dominio según ámbito; filtro de cualquier ID de actor | Regresión verificó UUID Gateway en cinco dominios; lectura API y selección/filtro en navegador para Identidad, Personal, Vacaciones, Contratos y Finanzas según rol PASS |
-| UX y accesibilidad técnica | Formularios/API, labels/teclado, diálogos, errores, contextoempleado | E2E módulos y contexto3módulos; viewportCDPreal1280/768/375 |
+| UX y accesibilidad técnica | Formularios/API, labels/teclado, diálogos, errores, contexto empleado y menú móvil desplegable | E2E módulos y contexto 3 módulos; viewport CDP 1280/768/375; Selenium verificó menú a 375 px, Escape, selección, ausencia de desbordamiento y captura revisada |
 | Persistencia/backup/restore | Volúmenesprivados,5dumps+PDF y restoreaislado | Reiniciohashesigual; restore5BDconteos+2volúmenesSHAiguales |
 | HTTPS/despliegue | Composecanónico y overlayTLSlocal | CookieSecure/HttpOnly/Strict +no-store observado;8healthyfinal |
 | CI y reproducibilidad | Lockfile, scriptsbootstrap/migración/health/recovery, workflowGitHub | Pasosequivalenteslocales comprobados; ejecuciónremotaGitHub noafirmada |

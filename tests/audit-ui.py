@@ -3,6 +3,7 @@ import re
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.common.exceptions import ElementClickInterceptedException
 
@@ -54,5 +55,20 @@ try:
     wait.until(lambda d: 'Perfil de acceso' in d.page_source)
     assert 'Servicio no disponible' not in browser.page_source
     print('account UI PASS')
+    browser.execute_cdp_cmd('Emulation.setDeviceMetricsOverride', {'width':375,'height':900,'deviceScaleFactor':1,'mobile':False})
+    wait.until(lambda d: d.execute_script('return innerWidth') == 375)
+    menu = browser.find_element(By.CSS_SELECTOR, '.mobile-menu-toggle')
+    navigation = browser.find_element(By.ID, 'module-nav')
+    assert menu.is_displayed() and not navigation.is_displayed()
+    menu.click()
+    wait.until(lambda d: navigation.is_displayed() and menu.get_attribute('aria-expanded') == 'true')
+    browser.save_screenshot('.runtime/mobile-drawer.png')
+    menu.send_keys(Keys.ESCAPE)
+    wait.until(lambda d: not navigation.is_displayed())
+    menu.click()
+    browser.find_element(By.XPATH, '//nav/button[contains(.,"Inicio")]').click()
+    wait.until(lambda d: not navigation.is_displayed() and 'Resumen de trabajo' in d.page_source)
+    assert browser.execute_script('return document.documentElement.scrollWidth<=innerWidth')
+    print('mobile drawer navigation UI PASS')
 finally:
     browser.quit()
