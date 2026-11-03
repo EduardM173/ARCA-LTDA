@@ -17,12 +17,12 @@ Fuentes: MASTER7.0 preservado en raíz, ampliación7.1 SMTP y solicitudes expres
 | Vacaciones |15días/gestión, ratificación, ledgerportenencia, saldo/reservas, solapamientos | Concurrencia, aprobación/rechazo, UIhistorial/débito2PASS |
 | Políticas variables | Calendario o horario semanal configurable con feriados, arrastre, reserva, aniversario 29/02 y cancelación | Migración de días laborables aplicada; prueba de cómputo focalizada PASS. El horario concreto, arrastre y aniversario requieren decisión académica; no se inventa normativa oficial. |
 | Avisos vacaciones | Pendientealaprobador, decisionesalcreador; revalidación permisos |4envíosSMTP reales + recepciónconfirmada, flujonegocioAPIreal |
-| Contratos | Plantillasversionadas, borradoreseditables, preview, snapshot, PDF privado | PruebasAPI/fallosfilesystem/reintentos y E2E navegadorPASS |
+| Contratos | Plantillas versionadas, borradores editables, revisión del texto antes de emitir, snapshot y PDF privado | Pruebas API/fallos filesystem/reintentos; recorrido documental en navegador y descarga PDF PASS |
 | Emisiones interrumpidas | Lock/transacción, reconciliaciónEMITIENDO, hash y estados coherentes | Casosfocalizados Contratos/PagosPASS; no falso EMITIDO |
-| Pagos y conceptos | Catálogo, multipartidas, Decimal, boletas, MANUAL/SIMULADO/paidBy | API/E2E con2partidas, pagoSIMULADO y persistenciaPASS |
+| Pagos y conceptos | Catálogo, multipartidas, Decimal, boletas, MANUAL/SIMULADO/paidBy; preparación bloqueada si faltan conceptos o personal | API/E2E con dos partidas, pago SIMULADO, PDF, persistencia y estados vacíos en navegador PASS |
 | Rectificación/anulación | Versiones vinculadas, original conservado, política explícita | PruebasfocalizadasPASS; aprobaciónoperativa a cargoresponsable |
 | IndicadoresDirectorio | Agregados completos por dominio/estado/periodo, sin salarios individuales | SummaryAPI/Boardnegativos y navegación porrol |
-| Auditoría | Actor/acción/recurso/instante y requestId propagado | Regresiónactual verificóUUIDGateway en5dominios; logging seguro |
+| Auditoría | Actor/acción/recurso/instante y requestId propagado, consulta paginada por dominio según ámbito | Regresión verificó UUID Gateway en cinco dominios; lectura API y selección en navegador para Identidad, Personal, Vacaciones, Contratos y Finanzas según rol PASS |
 | UX y accesibilidad técnica | Formularios/API, labels/teclado, diálogos, errores, contextoempleado | E2E módulos y contexto3módulos; viewportCDPreal1280/768/375 |
 | Persistencia/backup/restore | Volúmenesprivados,5dumps+PDF y restoreaislado | Reiniciohashesigual; restore5BDconteos+2volúmenesSHAiguales |
 | HTTPS/despliegue | Composecanónico y overlayTLSlocal | CookieSecure/HttpOnly/Strict +no-store observado;8healthyfinal |
