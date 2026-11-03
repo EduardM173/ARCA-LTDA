@@ -6,9 +6,10 @@ import {Action,Badge,Form,Notice,short,useData} from './components';
 type Props={employeeId:string;onEmployeeChange:(id:string)=>void;canAdmin:boolean;canIssue?:boolean;onChanged?:()=>void};
 type Modal={type:string;record?:Row;data?:any};
 function Dialog({title,onClose,children}:{title:string;onClose:()=>void;children:React.ReactNode}){
- const ref=useRef<HTMLDialogElement>(null);
+ const ref=useRef<HTMLDialogElement>(null),[discard,setDiscard]=useState(false);
  useEffect(()=>{ref.current?.showModal();return()=>ref.current?.close()},[]);
- return <dialog ref={ref} onCancel={onClose} style={{width:'min(850px,calc(100vw - 32px))',maxHeight:'90vh',overflow:'auto',border:'1px solid #ced9d1',borderRadius:12,padding:28,color:'#223c36'}}><div className="toolbar"><h2>{title}</h2><button type="button" onClick={onClose} aria-label="Cerrar diálogo">Cerrar ×</button></div>{children}</dialog>;
+ const close=()=>{if(ref.current?.querySelector('form[data-dirty="true"]'))setDiscard(true);else onClose()};
+ return <dialog ref={ref} onCancel={e=>{e.preventDefault();close()}} style={{width:'min(850px,calc(100vw - 32px))',maxHeight:'90vh',overflow:'auto',border:'1px solid #ced9d1',borderRadius:12,padding:28,color:'#223c36'}}><div className="toolbar"><h2>{title}</h2><button type="button" onClick={close} aria-label="Cerrar diálogo">Cerrar ×</button></div>{discard&&<div className="notice"><p>Hay cambios sin guardar en este diálogo.</p><div className="actions"><button type="button" onClick={()=>setDiscard(false)}>Seguir editando</button><button type="button" onClick={onClose}>Descartar cambios</button></div></div>}{children}</dialog>;
 }
 const actions:Record<string,string>={DRAFT_CREATED:'Borrador creado',DRAFT_UPDATED:'Borrador actualizado',ISSUED:'Documento emitido',ISSUE_RECOVERED:'Emisión recuperada',VOIDED:'Contrato anulado',RECTIFICATION_DRAFT:'Borrador de rectificación',RECTIFICATION_LINKED:'Rectificación vinculada'};
 export default function Contracts({employeeId,onEmployeeChange,canAdmin,canIssue=false,onChanged}:Props){
