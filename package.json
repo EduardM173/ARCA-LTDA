@@ -13,6 +13,9 @@
     "build": "node scripts/build.mjs",
     "dev": "node scripts/dev.mjs",
     "bootstrap": "node --env-file=.env scripts/local-bootstrap.mjs",
+    "demo:seed": "node --env-file=.env scripts/demo-local.mjs seed && node --env-file=.env scripts/demo-flows.mjs seed",
+    "demo:verify": "node --env-file=.env scripts/demo-local.mjs verify && node --env-file=.env scripts/demo-flows.mjs verify",
+    "demo:reset": "node --env-file=.env scripts/demo-reset.mjs",
     "test": "node --env-file=.env tests/integration.mjs"
   },
   "dependencies": {

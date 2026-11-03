@@ -60,3 +60,7 @@ Hay Dockerfiles y configuración para todos los procesos, volúmenes privados de
 `.env`, `.env.*`, `.runtime`, PDFs, dependencias y clientes generados están excluidos de Git e imágenes. `.env.example` no contiene secretos. El Gateway verifica sesión en Identidad antes de cada petición privada, y emite una aserción interna firmada, corta y limitada por audiencia. Los servicios comprueban esa identidad y sus roles. No almacenar tokens en localStorage.
 
 No se ha publicado ni subido este código a GitHub. Revisar ESTADO y las decisiones institucionales pendientes antes de cargar datos personales reales. No se atribuye conformidad legal, integración bancaria ni integración con Core.
+
+## Acceso a usuarios de demostración
+
+Las credenciales del entorno local de prueba se encuentran en [README_DEMO_LOCAL.md](README_DEMO_LOCAL.md), generado al cargar los datos. Este archivo está excluido de Git y solo existe en el equipo donde se preparó la demostración.

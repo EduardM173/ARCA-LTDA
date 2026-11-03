@@ -1,0 +1,30 @@
+// Remove only the recorded local fixture. Dry run unless explicit confirmation is supplied.
+import {createRequire} from 'node:module';
+import {readFile,unlink} from 'node:fs/promises';
+import {spawnSync} from 'node:child_process';
+const require=createRequire(import.meta.url);
+if(process.env.DEMO_LOCAL_ENABLE!=='yes'||process.env.NODE_ENV==='production'||!/^postgres(?:ql)?:\/\/[^@]+@(?:127\.0\.0\.1|localhost):55432\//.test(process.env.IDENTITY_DATABASE_URL||''))throw Error('Solo desarrollo local con PostgreSQL en 127.0.0.1:55432');
+const m=JSON.parse(await readFile('.runtime/demo-manifest.json','utf8'));
+const catalogs=JSON.parse(await readFile('.runtime/demo-catalogs.json','utf8'));
+const db=Object.fromEntries(['identity','personnel','vacation','contract','payment'].map(n=>[n,new(require(`../apps/${n}-service/generated/client`).PrismaClient)()]));
+const ids=prefix=>Object.entries(m).filter(([k,v])=>new RegExp('^'+prefix+'\\d+$').test(k)&&typeof v==='string'&&/^[0-9a-f-]{36}$/i.test(v)).map(([,v])=>v);
+const contractIds=ids('contract'),paymentIds=ids('payment'),leaveIds=ids('leave');
+const employees=await db.personnel.employee.findMany({where:{code:{startsWith:'DEMO-ARCA-'}},select:{id:true}}),employeeIds=employees.map(e=>e.id);
+const users=await db.identity.user.findMany({where:{email:{endsWith:'@demo.arca.test'}},select:{id:true}}),userIds=users.map(u=>u.id);
+const summary={users:userIds.length,employees:employeeIds.length,contracts:contractIds.length,payments:paymentIds.length,leaves:leaveIds.length};
+try{
+ if(process.argv[2]!=='--confirm=DELETE-DEMO-ARCA'){console.log('Solo simulación; no se eliminó nada:',JSON.stringify(summary));process.exitCode=0}
+ else{
+  if(summary.users!==30||summary.employees!==120||summary.contracts!==45||summary.payments!==80||summary.leaves!==60)throw Error('Conteos inesperados: se detiene la limpieza para inspección manual');
+  if(await db.contract.contract.count({where:{id:{in:contractIds},employeeId:{notIn:employeeIds}}})||await db.payment.payment.count({where:{id:{in:paymentIds},employeeId:{notIn:employeeIds}}})||await db.vacation.leaveRequest.count({where:{id:{in:leaveIds},employeeId:{notIn:employeeIds}}}))throw Error('El manifiesto contiene relaciones ajenas al fixture');
+  if(await db.contract.contract.count({where:{employeeId:{in:employeeIds},id:{notIn:contractIds}}})||await db.payment.payment.count({where:{employeeId:{in:employeeIds},id:{notIn:paymentIds}}})||await db.vacation.leaveRequest.count({where:{employeeId:{in:employeeIds},id:{notIn:leaveIds}}})||await db.vacation.leaveRequest.count({where:{policyId:m.vacationPolicy,id:{notIn:leaveIds}}}))throw Error('Hay registros ajenos relacionados con datos demo; no se eliminarán automáticamente');
+  if(await db.personnel.employee.count({where:{id:{notIn:employeeIds},OR:[{departmentId:{in:catalogs.departments}},{positionId:{in:catalogs.positions}}]}}))throw Error('Hay funcionarios ajenos asociados a catálogos demo; se detiene limpieza');
+  await db.vacation.outbox.deleteMany({where:{requestId:{in:leaveIds}}});await db.vacation.movement.deleteMany({where:{employeeId:{in:employeeIds}}});await db.vacation.entitlement.deleteMany({where:{employeeId:{in:employeeIds}}});await db.vacation.vacationAudit.deleteMany({where:{OR:[{actor:{in:userIds}},{resource:{in:leaveIds}}]}});await db.vacation.leaveRequest.deleteMany({where:{id:{in:leaveIds}}});if(m.vacationPolicy)await db.vacation.policy.delete({where:{id:m.vacationPolicy}});
+  await db.contract.contractAudit.deleteMany({where:{OR:[{actorId:{in:userIds}},{resourceId:{in:contractIds}}]}});await db.contract.contract.deleteMany({where:{id:{in:contractIds}}});await db.contract.template.deleteMany({where:{id:{in:ids('template')}}});if(m.contractPolicy)await db.contract.contractPolicy.delete({where:{id:m.contractPolicy}});
+  await db.payment.paymentAudit.deleteMany({where:{OR:[{actor:{in:userIds}},{paymentId:{in:paymentIds}}]}});await db.payment.payment.deleteMany({where:{id:{in:paymentIds}}});await db.payment.concept.deleteMany({where:{id:{in:ids('concept')}}});if(m.paymentPolicy)await db.payment.paymentPolicy.delete({where:{id:m.paymentPolicy}});
+  await db.personnel.employmentEvent.deleteMany({where:{employeeId:{in:employeeIds}}});await db.personnel.employmentPeriod.deleteMany({where:{employeeId:{in:employeeIds}}});await db.personnel.salary.deleteMany({where:{employeeId:{in:employeeIds}}});await db.personnel.employee.deleteMany({where:{id:{in:employeeIds}}});if(m.personnelPolicy)await db.personnel.personnelPolicy.delete({where:{id:m.personnelPolicy}});await db.personnel.department.deleteMany({where:{id:{in:catalogs.departments}}});await db.personnel.position.deleteMany({where:{id:{in:catalogs.positions}}});
+  await db.identity.mailDelivery.deleteMany({where:{recipientId:{in:userIds}}});await db.identity.emailVerification.deleteMany({where:{userId:{in:userIds}}});await db.identity.passwordReset.deleteMany({where:{userId:{in:userIds}}});await db.identity.session.deleteMany({where:{userId:{in:userIds}}});await db.identity.audit.deleteMany({where:{OR:[{actor:{in:userIds}},{resource:{in:userIds}}]}});await db.identity.user.deleteMany({where:{id:{in:userIds}}});
+  for(const [service,documents] of [['contract',contractIds],['payment',paymentIds]]){const code=`const{unlink}=require('node:fs/promises');const ids=${JSON.stringify(documents)};(async()=>{for(const id of ids)await unlink('/app/.runtime/documents/${service}-service/'+id+'.pdf').catch(e=>{if(e.code!=='ENOENT')throw e})})().catch(()=>process.exitCode=1)`;const r=spawnSync('docker',['compose','exec','-T',service+'-service','node'],{input:code,encoding:'utf8'});if(r.status!==0)throw Error('No se pudieron limpiar PDFs demo de '+service)}
+  await unlink('.runtime/demo-manifest.json');await unlink('.runtime/demo-catalogs.json');await unlink('README_DEMO_LOCAL.md');console.log('Fixture local eliminado por IDs; datos ajenos preservados.');
+ }
+}finally{await Promise.all(Object.values(db).map(x=>x.$disconnect()))}
