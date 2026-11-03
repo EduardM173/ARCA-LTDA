@@ -6,7 +6,7 @@ import {unlink,mkdir,writeFile} from 'node:fs/promises';
 import argon from 'argon2';
 const require=createRequire(import.meta.url);
 const clients=Object.fromEntries(['identity','personnel','vacation','contract','payment'].map(n=>[n,new (require(`../apps/${n}-service/generated/client`).PrismaClient)()]));
-const run=randomUUID(),conceptIds=[],password=randomUUID()+'-Aa1!',users=[],employees=[],departments=[],positions=[],contracts=[],payments=[],templates=[],requests=[],policies=[];
+const run=randomUUID(),conceptIds=[],password=randomUUID()+'-Aa1!',users=[],employees=[],departments=[],positions=[],contracts=[],payments=[],templates=[],requests=[],policies=[],personnelPolicies=[];
 const base=process.env.API_BASE||'http://localhost:3000/api/v1/';
 async function request(path,method='GET',body,cookie='',expected=200){
  const suppliedRequestId=randomUUID();const res=await fetch(base+path,{method,headers:{'x-request-id':suppliedRequestId,origin:'http://localhost:5173','content-type':'application/json',cookie},body:body===undefined?undefined:JSON.stringify(body)});
@@ -56,6 +56,15 @@ try{
  await request('payments/'+pay.id+'/record-payment','POST',{date:today,reference:'SINTETICO '+run,evidence:'Referencia sintética de integración, no transferencia bancaria'},finance,201);
  const slip=(await request('payments/'+pay.id+'/pdf','GET',undefined,finance)).data;await writeFile('.runtime/test-evidence/payment.pdf',slip);pass('aritmética decimal y emisión distinta de pago');
  const old=await clients.personnel.employee.findUnique({where:{id:e.id}});await request('employees/'+e.id+'/salary','POST',{amount:'6000.00',effectiveAt:today,version:old.version},admin,201);assert.equal((await clients.contract.contract.findUnique({where:{id:c.id}})).snapshot.salary,'5000.10');pass('snapshot contractual inmutable ante cambio salarial');
+ const personnelPolicy=(await request('employees/policy','POST',{allowRetroactiveSalary:true,allowReentry:false,reentryTenure:'RESET',compensationPoint:'START',approval:true},admin,201)).data;personnelPolicies.push(personnelPolicy.id);
+ const salaryBefore=await clients.personnel.employee.findUniqueOrThrow({where:{id:e.id}});
+ await request('employees/'+e.id+'/salary','POST',{amount:'5500.25',effectiveAt:'2025-06-01',version:salaryBefore.version},admin,400);
+ const retroReason='Rectificación sintética autorizada para verificar historial';
+ await request('employees/'+e.id+'/salary','POST',{amount:'5500.25',effectiveAt:'2025-06-01',version:salaryBefore.version,reason:retroReason},admin,201);
+ const retroEvent=await clients.personnel.employmentEvent.findFirstOrThrow({where:{employeeId:e.id,action:'SALARIO'},orderBy:{createdAt:'desc'}});
+ assert.equal(retroEvent.data.reason,retroReason);assert.equal(retroEvent.data.policyId,personnelPolicy.id);assert.equal(retroEvent.data.retroactive,true);
+ assert.equal((await clients.personnel.salary.findUniqueOrThrow({where:{employeeId_effectiveAt:{employeeId:e.id,effectiveAt:new Date('2025-06-01')}}})).amount.toFixed(2),'5500.25');
+ assert.equal((await clients.contract.contract.findUniqueOrThrow({where:{id:c.id}})).snapshot.salary,'5000.10');pass('salario retroactivo exige motivo y conserva historial y PDF previo');
  for(const rid of requests){const r=await clients.vacation.leaveRequest.findUnique({where:{id:rid}});if(r.status==='APROBADA')await request('vacations/requests/'+rid+'/cancel','POST',{reason:'Cancelación sintética antes de baja'},approver,201);else if(r.status==='PENDIENTE')await request('vacations/requests/'+rid+'/reject','POST',{reason:'Cierre sintético antes de baja'},approver,201)}
  const updated=await clients.personnel.employee.findUnique({where:{id:e.id}});await request('employees/'+e.id+'/termination','POST',{date:today,reason:'Baja sintética de integración',version:updated.version},admin,201);await request('contracts/'+c.id+'/pdf','GET',undefined,admin);pass('baja conserva documentos históricos');
  await request('users/'+users[3],'PATCH',{active:false},admin);await request('employees','GET',undefined,board,401);pass('sesión revocada después de bloquear usuario');
@@ -65,7 +74,7 @@ try{
 }finally{
  await clients.vacation.movement.deleteMany({where:{employeeId:{in:employees}}});await clients.vacation.entitlement.deleteMany({where:{employeeId:{in:employees}}});await clients.vacation.vacationAudit.deleteMany({where:{actor:{in:users}}});await clients.vacation.outbox.deleteMany({where:{requestId:{in:requests}}});await clients.vacation.leaveRequest.deleteMany({where:{id:{in:requests}}});await clients.vacation.policy.deleteMany({where:{id:{in:policies}}});
  await clients.contract.contractAudit.deleteMany({where:{actorId:{in:users}}});await clients.contract.contract.deleteMany({where:{id:{in:contracts}}});await clients.contract.template.deleteMany({where:{id:{in:templates}}});await clients.payment.paymentAudit.deleteMany({where:{actor:{in:users}}});await clients.payment.payment.deleteMany({where:{id:{in:payments}}});await clients.payment.concept.deleteMany({where:{id:{in:conceptIds}}});
- await clients.personnel.employmentPeriod.deleteMany({where:{employeeId:{in:employees}}});await clients.personnel.employmentEvent.deleteMany({where:{employeeId:{in:employees}}});await clients.personnel.salary.deleteMany({where:{employeeId:{in:employees}}});await clients.personnel.employee.deleteMany({where:{id:{in:employees}}});await clients.personnel.department.deleteMany({where:{id:{in:departments}}});await clients.personnel.position.deleteMany({where:{id:{in:positions}}});
+ await clients.personnel.employmentPeriod.deleteMany({where:{employeeId:{in:employees}}});await clients.personnel.employmentEvent.deleteMany({where:{employeeId:{in:employees}}});await clients.personnel.salary.deleteMany({where:{employeeId:{in:employees}}});await clients.personnel.employee.deleteMany({where:{id:{in:employees}}});await clients.personnel.personnelPolicy.deleteMany({where:{id:{in:personnelPolicies}}});await clients.personnel.department.deleteMany({where:{id:{in:departments}}});await clients.personnel.position.deleteMany({where:{id:{in:positions}}});
  await clients.identity.session.deleteMany({where:{userId:{in:users}}});await clients.identity.passwordReset.deleteMany({where:{userId:{in:users}}});await clients.identity.audit.deleteMany({where:{OR:[{actor:{in:users}},{resource:{in:users}}]}});await clients.identity.user.deleteMany({where:{id:{in:users}}});
  const cleanupErrors=[];
  try{
