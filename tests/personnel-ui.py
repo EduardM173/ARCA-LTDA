@@ -27,6 +27,8 @@ def button(text, root=None):
 
 
 def form(title):
+    if not driver.find_elements(By.XPATH, '//form[h3[normalize-space(.)="' + title + '"]]'):
+        button(title)
     return wait.until(EC.presence_of_element_located((By.XPATH, '//form[h3[normalize-space(.)="' + title + '"]]')))
 
 

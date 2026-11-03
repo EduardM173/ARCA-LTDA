@@ -15,7 +15,9 @@ def fill(root,values):
   if e.tag_name=='select':Select(e).select_by_value(value)
   elif e.get_attribute('type')=='date':d.execute_script('arguments[0].value=arguments[1]',e,value)
   else:e.clear();e.send_keys(value)
-def form(title):return w.until(lambda x:x.find_element(By.XPATH,'//form[h3[normalize-space(.)="'+title+'"]]'))
+def form(title):
+ if not d.find_elements(By.XPATH,'//form[h3[normalize-space(.)="'+title+'"]]'):d.find_element(By.XPATH,'//button[normalize-space(.)="'+title+'"]').click()
+ return w.until(lambda x:x.find_element(By.XPATH,'//form[h3[normalize-space(.)="'+title+'"]]'))
 def employee():
  def choose(x):
   try:

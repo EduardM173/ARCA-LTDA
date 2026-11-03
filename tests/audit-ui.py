@@ -41,9 +41,11 @@ try:
     print('actor audit filter UI PASS')
     browser.find_element(By.XPATH, '//nav//button[contains(.,"Vacaciones")]').click()
     browser.find_element(By.XPATH, '//button[contains(.,"Revisar configuración")]').click()
+    browser.find_element(By.XPATH, '//button[normalize-space()="Aprobar una nueva versión"]').click()
     wait.until(lambda d: 'Días laborables del horario semanal' in d.page_source)
     assert len(browser.find_elements(By.CSS_SELECTOR, 'input[type=checkbox]:checked')) >= 5
     print('vacation schedule UI PASS')
+    browser.find_element(By.CSS_SELECTOR, 'dialog.form-dialog button[aria-label="Cerrar diálogo"]').click()
     try:
         browser.find_element(By.XPATH, '//nav//button[contains(.,"Mi cuenta")]').click()
     except ElementClickInterceptedException:
@@ -52,17 +54,15 @@ try:
     wait.until(lambda d: 'Perfil de acceso' in d.page_source)
     assert 'Servicio no disponible' not in browser.page_source
     print('account UI PASS')
+    browser.find_element(By.XPATH, '//button[normalize-space()="Cambiar contraseña"]').click()
     browser.find_element(By.NAME, 'currentPassword').send_keys('sin-enviar')
-    browser.find_element(By.XPATH, '//nav/button[contains(.,"Inicio")]').click()
-    wait.until(lambda d: 'Cambios sin guardar' in d.find_element(By.CSS_SELECTOR, '[role="dialog"]').text)
-    browser.find_element(By.XPATH, '//button[normalize-space()="Seguir editando"]').click()
+    browser.find_element(By.CSS_SELECTOR, 'dialog.form-dialog .toolbar button').click()
+    wait.until(lambda d: 'Hay cambios sin guardar' in d.find_element(By.CSS_SELECTOR, 'dialog.form-dialog').text)
+    browser.find_element(By.XPATH, '//dialog[contains(@class,"form-dialog")]//button[normalize-space()="Seguir editando"]').click()
     assert browser.find_element(By.NAME, 'currentPassword').get_attribute('value') == 'sin-enviar'
-    browser.find_element(By.XPATH, '//header//button[contains(.,"Cerrar sesión")]').click()
-    wait.until(lambda d: '¿Deseas cerrar la sesión?' in d.find_element(By.CSS_SELECTOR, '[role="dialog"]').text)
-    browser.find_element(By.XPATH, '//button[normalize-space()="Seguir editando"]').click()
-    assert browser.find_element(By.NAME, 'currentPassword').get_attribute('value') == 'sin-enviar'
+    browser.find_element(By.CSS_SELECTOR, 'dialog.form-dialog .toolbar button').click()
+    browser.find_element(By.XPATH, '//dialog[contains(@class,"form-dialog")]//button[normalize-space()="Descartar cambios"]').click()
     browser.find_element(By.XPATH, '//nav/button[contains(.,"Inicio")]').click()
-    browser.find_element(By.XPATH, '//button[normalize-space()="Descartar y continuar"]').click()
     wait.until(lambda d: 'Resumen de trabajo' in d.page_source)
     print('unsaved account form navigation UI PASS')
     browser.execute_cdp_cmd('Emulation.setDeviceMetricsOverride', {'width':375,'height':900,'deviceScaleFactor':1,'mobile':False})
@@ -94,5 +94,17 @@ try:
     modal.find_element(By.XPATH, './/button[normalize-space()="Descartar cambios"]').click()
     wait.until(lambda d: not d.find_elements(By.CSS_SELECTOR, 'dialog[open]'))
     print('administration dialog unsaved changes UI PASS')
+    browser.find_element(By.XPATH, '//nav/button[contains(.,"Personal")]').click()
+    browser.find_element(By.XPATH, '//button[normalize-space()="+ Nuevo funcionario"]').click()
+    assert not browser.find_elements(By.XPATH, '//form[h3[normalize-space()="Alta de funcionario"]]')
+    browser.find_element(By.XPATH, '//button[normalize-space()="Alta de funcionario"]').click()
+    form = wait.until(lambda d: d.find_element(By.XPATH, '//dialog[@open]//form[h3[normalize-space()="Alta de funcionario"]]'))
+    assert form.find_element(By.NAME, 'name').is_displayed()
+    form.find_element(By.NAME, 'name').send_keys('Sin guardar')
+    browser.find_element(By.CSS_SELECTOR, 'dialog.form-dialog button[aria-label="Cerrar diálogo"]').click()
+    wait.until(lambda d: 'Hay cambios sin guardar' in d.find_element(By.CSS_SELECTOR, 'dialog.form-dialog').text)
+    browser.find_element(By.XPATH, '//dialog[contains(@class,"form-dialog")]//button[normalize-space()="Descartar cambios"]').click()
+    wait.until(lambda d: not d.find_elements(By.CSS_SELECTOR, 'dialog[open]'))
+    print('personnel form dialog and unsaved changes UI PASS')
 finally:
     browser.quit()
