@@ -14,6 +14,7 @@ model Policy {
  cancelPending Boolean @default(false)
  cancelApproved Boolean @default(false)
  counting String
+ weekdays Int[] @default([1,2,3,4,5])
  carryover Boolean
  holidays String[]
  approvedBy String

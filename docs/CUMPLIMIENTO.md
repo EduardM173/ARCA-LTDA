@@ -13,9 +13,9 @@ Fuentes: MASTER7.0 preservado en raíz, ampliación7.1 SMTP y solicitudes expres
 | SMTP/propiedad correo | TLS, verificaciónlink, outboxcifrada/leases/reintentos | Gmailaceptó y usuario confirmórecepción de flujos reales |
 | Recuperación | Hash de token/unuso/caducidad, sesionesrevocadas | SMTP+consumoAPI, expiry/reuso/concurrenciaPASS |
 | Personal | Altas, catálogos, cambios/versiones, periodos/historial, ratificación/baja | DB/HTTP y E2E PersonalPASS |
-| Reingreso/retroactividad | Reingreso con expediente y periodo nuevo bajo política; salario retroactivo permitido bajo política | E2E reingreso con política sintética PASS. Propuesta de ensayo pendiente; salario retroactivo aún no exige motivo individual y asignación retroactiva se rechaza. |
+| Reingreso/retroactividad | Reingreso con expediente y periodo nuevo bajo política; salario retroactivo exige motivo individual y política aprobada | E2E reingreso con política sintética PASS. La nueva exigencia de motivo pasó typecheck y está desplegada; falta prueba positiva aislada. Asignación retroactiva aún se rechaza. |
 | Vacaciones |15días/gestión, ratificación, ledgerportenencia, saldo/reservas, solapamientos | Concurrencia, aprobación/rechazo, UIhistorial/débito2PASS |
-| Políticas variables | Calendario o lunes a viernes con feriados, arrastre, reserva, aniversario 29/02 y cancelación | La propuesta solicita horario laborable configurable: pendiente de implementación. Arrastre y aniversario requieren decisión académica; no se inventa normativa oficial. |
+| Políticas variables | Calendario o horario semanal configurable con feriados, arrastre, reserva, aniversario 29/02 y cancelación | Migración de días laborables aplicada; prueba de cómputo focalizada PASS. El horario concreto, arrastre y aniversario requieren decisión académica; no se inventa normativa oficial. |
 | Avisos vacaciones | Pendientealaprobador, decisionesalcreador; revalidación permisos |4envíosSMTP reales + recepciónconfirmada, flujonegocioAPIreal |
 | Contratos | Plantillasversionadas, borradoreseditables, preview, snapshot, PDF privado | PruebasAPI/fallosfilesystem/reintentos y E2E navegadorPASS |
 | Emisiones interrumpidas | Lock/transacción, reconciliaciónEMITIENDO, hash y estados coherentes | Casosfocalizados Contratos/PagosPASS; no falso EMITIDO |
