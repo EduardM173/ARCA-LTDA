@@ -3,7 +3,7 @@ import {createRequire} from 'node:module';
 import {readFile,unlink} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
 const require=createRequire(import.meta.url);
-if(process.env.DEMO_LOCAL_ENABLE!=='yes'||process.env.NODE_ENV==='production'||!/^postgres(?:ql)?:\/\/[^@]+@(?:127\.0\.0\.1|localhost):55432\//.test(process.env.IDENTITY_DATABASE_URL||''))throw Error('Solo desarrollo local con PostgreSQL en 127.0.0.1:55432');
+if(process.env.DEMO_LOCAL_ENABLE!=='yes'||process.env.NODE_ENV==='production'||['IDENTITY','PERSONNEL','VACATION','CONTRACT','PAYMENT'].some(name=>!/^postgres(?:ql)?:\/\/[^@]+@(?:127\.0\.0\.1|localhost):55432\//.test(process.env[name+'_DATABASE_URL']||'')))throw Error('Las cinco bases deben ser locales en 127.0.0.1:55432');
 const m=JSON.parse(await readFile('.runtime/demo-manifest.json','utf8'));
 const catalogs=JSON.parse(await readFile('.runtime/demo-catalogs.json','utf8'));
 const db=Object.fromEntries(['identity','personnel','vacation','contract','payment'].map(n=>[n,new(require(`../apps/${n}-service/generated/client`).PrismaClient)()]));

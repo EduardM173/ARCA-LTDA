@@ -7,7 +7,7 @@ const require=createRequire(import.meta.url);
 const clients=Object.fromEntries(['identity','personnel','vacation','contract','payment'].map(x=>[x,new(require(`../apps/${x}-service/generated/client`).PrismaClient)()]));
 const manifestPath='.runtime/demo-manifest.json',base='http://127.0.0.1:3000/api/v1/';
 const action=process.argv[2]||'verify';
-if(process.env.DEMO_LOCAL_ENABLE!=='yes'||process.env.NODE_ENV==='production'||!/^postgres(?:ql)?:\/\/[^@]+@(?:127\.0\.0\.1|localhost):55432\//.test(process.env.IDENTITY_DATABASE_URL||''))throw Error('Solo desarrollo local con PostgreSQL en 127.0.0.1:55432');
+if(process.env.DEMO_LOCAL_ENABLE!=='yes'||process.env.NODE_ENV==='production'||['IDENTITY','PERSONNEL','VACATION','CONTRACT','PAYMENT'].some(name=>!/^postgres(?:ql)?:\/\/[^@]+@(?:127\.0\.0\.1|localhost):55432\//.test(process.env[name+'_DATABASE_URL']||'')))throw Error('Las cinco bases deben ser locales en 127.0.0.1:55432');
 let m=JSON.parse(await readFile(manifestPath,'utf8').catch(()=>'{}'));
 async function save(){await mkdir('.runtime',{recursive:true});await writeFile(manifestPath,JSON.stringify(m,null,2)+'\n',{mode:0o600})}
 const credentials=(await readFile('README_DEMO_LOCAL.md','utf8')).split('\n').filter(x=>/^\| \d+ \|/.test(x)).map(x=>{const c=x.split('|').map(s=>s.trim());return {email:c[3],password:c[4]}});
