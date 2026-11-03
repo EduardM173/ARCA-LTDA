@@ -1,0 +1,6 @@
+.vacation-balances p{border:1px solid #dce7df;border-radius:10px;padding:14px}
+.vacation-balances strong{font-size:1.35rem}
+.vacation-timeline{border-left:2px solid #b5cbbd;margin:20px 0 20px 12px;padding-left:24px}
+.vacation-timeline li{padding:0 0 18px 6px}
+.vacation-timeline li::marker{color:#075b4e}
+.vacation-timeline p{margin:6px 0}
