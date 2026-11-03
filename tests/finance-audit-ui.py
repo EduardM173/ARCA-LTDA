@@ -43,12 +43,13 @@ try:
     browser.find_element(By.XPATH, '//nav//button[contains(.,"Administración")]').click()
     wait.until(lambda d: 'Auditoría por dominio' in d.page_source)
     assert browser.find_element(By.XPATH, '//label[contains(.,"Dominio")]/select').get_attribute('value') == 'payments'
-    actor = browser.find_element(By.XPATH, '//label[contains(.,"Actor (ID)")]/input')
-    actor.send_keys('incompleto')
-    wait.until(lambda d: 'Complete el ID del actor' in d.page_source)
-    actor.clear()
-    actor.send_keys(' ')
-    wait.until(lambda d: actor.get_attribute('value') == '' and 'Complete el ID del actor' not in d.find_element(By.TAG_NAME, 'body').text)
+    actor = Select(browser.find_element(By.XPATH, '//label[starts-with(normalize-space(.),"Responsable")]/select'))
+    assert actor.first_selected_option.get_attribute('value') == ''
+    assert not browser.find_elements(By.XPATH, '//label[contains(.,"Actor (ID)")]/input')
+    if len(actor.options) > 1:
+        actor.select_by_index(1)
+        wait.until(lambda d: 'eventos · página' in d.page_source)
+        actor.select_by_value('')
     assert 'Usuarios y permisos' not in browser.page_source
     assert 'Catálogos' not in browser.page_source
     assert 'Servicio no disponible' not in browser.page_source

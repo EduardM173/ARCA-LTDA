@@ -34,13 +34,10 @@ try:
     Select(browser.find_element(By.XPATH, '//label[contains(.,"Dominio")]/select')).select_by_value('users')
     actor_button = wait.until(lambda d: d.find_element(By.XPATH, '//button[normalize-space()="Filtrar por este actor"]'))
     actor_button.click()
-    actor_input = browser.find_element(By.XPATH, '//label[contains(.,"Actor (ID)")]/input')
-    assert len(actor_input.get_attribute('value')) == 36
-    wait.until(lambda d: 'eventos · página' in d.page_source and 'Complete el ID del actor' not in d.page_source)
-    actor_input.clear()
-    actor_input.send_keys('incorrecto')
-    wait.until(lambda d: 'Complete el ID del actor' in d.page_source)
-    actor_input.clear()
+    actor_select = Select(browser.find_element(By.XPATH, '//label[starts-with(normalize-space(.),"Responsable")]/select'))
+    assert len(actor_select.first_selected_option.get_attribute('value')) == 36
+    wait.until(lambda d: 'eventos · página' in d.page_source)
+    actor_select.select_by_value('')
     print('actor audit filter UI PASS')
     browser.find_element(By.XPATH, '//nav//button[contains(.,"Vacaciones")]').click()
     browser.find_element(By.XPATH, '//button[contains(.,"Revisar configuración")]').click()
