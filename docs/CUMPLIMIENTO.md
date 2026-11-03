@@ -19,6 +19,7 @@ Fuentes: MASTER7.0 preservado en raíz, ampliación7.1 SMTP y solicitudes expres
 | Avisos vacaciones | Pendientealaprobador, decisionesalcreador; revalidación permisos |4envíosSMTP reales + recepciónconfirmada, flujonegocioAPIreal |
 | Contratos | Plantillas versionadas, borradores editables, revisión del texto antes de emitir, snapshot y PDF privado | Pruebas API/fallos filesystem/reintentos; recorrido documental en navegador y descarga PDF PASS |
 | Emisiones interrumpidas | Lock/transacción, reconciliaciónEMITIENDO, hash y estados coherentes | Casosfocalizados Contratos/PagosPASS; no falso EMITIDO |
+| T14: Personal no disponible | Emisión nueva de Contratos y Pagos revalida Personal; PDF histórico usa documento almacenado | Personal detenido realmente: ambos servicios devolvieron 503 para borrador nuevo, conservaron BORRADOR y sirvieron PDF histórico; Contratos 11 grupos e integración 13 grupos PASS |
 | Pagos y conceptos | Catálogo, multipartidas, Decimal, boletas, MANUAL/SIMULADO/paidBy; preparación bloqueada si faltan conceptos o personal | API/E2E con dos partidas, pago SIMULADO, PDF, persistencia y estados vacíos en navegador PASS |
 | Rectificación/anulación | Versiones vinculadas, original conservado, política explícita | PruebasfocalizadasPASS; aprobaciónoperativa a cargoresponsable |
 | IndicadoresDirectorio | Agregados completos por dominio/estado/periodo, sin salarios individuales | SummaryAPI/Boardnegativos y navegación porrol |

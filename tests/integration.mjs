@@ -55,6 +55,17 @@ try{
  const issued=(await request('payments/'+pay.id+'/issue','POST',{},finance,201)).data;assert.equal(issued.status,'EMITIDO');
  await request('payments/'+pay.id+'/record-payment','POST',{date:today,reference:'SINTETICO '+run,evidence:'Referencia sintética de integración, no transferencia bancaria'},finance,201);
  const slip=(await request('payments/'+pay.id+'/pdf','GET',undefined,finance)).data;await writeFile('.runtime/test-evidence/payment.pdf',slip);pass('aritmética decimal y emisión distinta de pago');
+ if(process.env.DOCKER_DEPENDENCY_TEST==='true'){
+  const previous=new Date(today+'T00:00:00Z');previous.setUTCMonth(previous.getUTCMonth()-1);
+  const dependent=(await request('payments','POST',{employeeId:e.id,period:previous.toISOString().slice(0,7),lines:[{concept:conceptA.name,type:'ABONO',amount:'0.20'}]},finance,201)).data;payments.push(dependent.id);
+  try{
+   const stopped=spawnSync('docker',['compose','stop','personnel-service'],{encoding:'utf8'});assert.equal(stopped.status,0,stopped.stderr);
+   await request('payments/'+dependent.id+'/issue','POST',{},finance,503);
+   assert.equal((await clients.payment.payment.findUniqueOrThrow({where:{id:dependent.id}})).status,'BORRADOR');
+   assert.deepEqual((await request('payments/'+pay.id+'/pdf','GET',undefined,finance)).data,slip);
+  }finally{const resumed=spawnSync('docker',['compose','-f','compose.yaml','-f','compose.dev.yaml','up','-d','--no-build','--wait','personnel-service'],{encoding:'utf8'});assert.equal(resumed.status,0,resumed.stderr)}
+  pass('Personal caído bloquea boleta nueva y conserva PDF histórico');
+ }
  const old=await clients.personnel.employee.findUnique({where:{id:e.id}});await request('employees/'+e.id+'/salary','POST',{amount:'6000.00',effectiveAt:today,version:old.version},admin,201);assert.equal((await clients.contract.contract.findUnique({where:{id:c.id}})).snapshot.salary,'5000.10');pass('snapshot contractual inmutable ante cambio salarial');
  const personnelPolicy=(await request('employees/policy','POST',{allowRetroactiveSalary:true,allowReentry:false,reentryTenure:'RESET',compensationPoint:'START',approval:true},admin,201)).data;personnelPolicies.push(personnelPolicy.id);
  const salaryBefore=await clients.personnel.employee.findUniqueOrThrow({where:{id:e.id}});

@@ -51,9 +51,15 @@ try{
  const list=await api(`contracts?page=1&employeeId=${employee.id}&status=EMITIDO`);assert.equal(list.total,1);assert.equal(list.items[0].id,failure.id);pass('filtros y paginación reales');
  const summary=await api('contracts/summary','GET',undefined,200,{...actor,roles:['BOARD']});assert.equal(summary.total,ids.length);assert.equal(summary.snapshot,undefined);
  await writeFile(resolve(documents,failure.id+'.pdf'),'CORRUPTED SYNTHETIC TEST');await api(`contracts/${failure.id}/pdf`,'GET',undefined,503);assert.equal((await contracts.contract.findUnique({where:{id:failure.id}})).status,'EMITIDO');pass('indicadores agregados y corrupción histórica falla cerrada sin reescribir');
+ const dependent=await api('contracts','POST',{...input,requestKey:randomUUID()},201);ids.push(dependent.id);
+ const personnelExited=new Promise(r=>pe.p.once('exit',r));pe.p.kill();await personnelExited;
+ await api(`contracts/${dependent.id}/issue`,'POST',{},503);
+ assert.equal((await contracts.contract.findUniqueOrThrow({where:{id:dependent.id}})).status,'BORRADOR');
+ assert.deepEqual(await api(`contracts/${c.id}/pdf`),pdf);pass('Personal caído bloquea nueva emisión y conserva PDF histórico');
  console.log(`${checks} comprobaciones Contratos aprobadas.`);
 }finally{
- for(const p of children)p.kill();await Promise.all(children.map(p=>p.exitCode!==null?undefined:new Promise(r=>p.once('exit',r))));
+ const exits=children.map(p=>p.exitCode!==null||p.signalCode!==null?Promise.resolve():new Promise(r=>p.once('exit',r)));
+ for(const p of children)if(p.exitCode===null&&p.signalCode===null)p.kill();await Promise.all(exits);
  await contracts.contractAudit.deleteMany({where:{actorId:actor.id}});await contracts.contract.deleteMany({where:{id:{in:ids}}});await contracts.contractPolicy.deleteMany({where:{id:{in:policies}}});await contracts.template.deleteMany({where:{id:{in:templates}}});
  if(employee){await personnel.salary.deleteMany({where:{employeeId:employee.id}});await personnel.employee.delete({where:{id:employee.id}})}if(department)await personnel.department.delete({where:{id:department.id}});if(position)await personnel.position.delete({where:{id:position.id}});
  for(const id of ids)await unlink(resolve(documents,id+'.pdf')).catch(()=>{});await unlink(blocked).catch(()=>{});await contracts.$disconnect();await personnel.$disconnect();

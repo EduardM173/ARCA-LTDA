@@ -31,6 +31,8 @@ Las pruebas usan tokens internos firmados con las claves locales y fixtures etiq
 
 Pendientes externos de este módulo: ratificar políticas financieras mediante el dueño de negocio; se construyó el mecanismo pero no se aprobaron reglas de producción. La revisión de Persona de la UX y los recorridos con el frontend integrado corresponden a la validación de sistema, no se declaran realizados por estas pruebas de servicio.
 
+03/11/2026: la integración desplegada con `DOCKER_DEPENDENCY_TEST=true` pasó 13 grupos. Detuvo Personal entre la preparación y emisión de una boleta sintética: HTTP 503, borrador persistente y PDF histórico accesible. El servicio se restauró dentro del test, se retiraron las filas/PDFs del fixture y PostgreSQL volvió a no publicar puerto. La primera ejecución expuso un error del comando de restauración del overlay SQL; se corrigió y la repetición completa aprobó.
+
 ## Navegador integrado · 02/11/2026
 
 `node --env-file=.env tests/documents-ui.mjs` terminó con tres comprobaciones PASS. Desde React se creó un concepto ABONO, se guardaron dos partidas decimales (0,20 + 0,10), se emitió la boleta PDF, se descargó por sesión autenticada y se registró SIMULADO con referencia/evidencia. La BD confirmó PAGADO, paymentMode=SIMULADO y neto=5000,40. Se abrió la trazabilidad. Captura revisada en `.runtime/documents-ui-payment.png`. Fixtures y PDF operativos sintéticos se eliminaron por sus IDs; copia visual conservada.
