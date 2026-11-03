@@ -15,7 +15,7 @@ try{
  const python=process.env.USERPROFILE+'\\.codex\\tools\\selenium-env\\Scripts\\python.exe';
  const r=spawnSync(python,['tests/personnel-ui.py',inputFile],{stdio:'inherit'});if(r.status!==0)process.exitCode=r.status||1;
 }finally{
- const employees=await staff.employee.findMany({where:{code:{in:codes}},select:{id:true}}),ids=employees.map(e=>e.id);
+ const employees=await staff.employee.findMany({where:{departmentId:{in:departments.map(d=>d.id)}},select:{id:true}}),ids=employees.map(e=>e.id);
  await staff.employmentEvent.deleteMany({where:{employeeId:{in:ids}}});await staff.employmentPeriod.deleteMany({where:{employeeId:{in:ids}}});await staff.salary.deleteMany({where:{employeeId:{in:ids}}});await staff.employee.deleteMany({where:{id:{in:ids}}});
  // Delete only policies approved by this test's synthetic administrator, never other runs.
  await staff.personnelPolicy.deleteMany({where:{approvedBy:{in:users.map(u=>u.id)}}});

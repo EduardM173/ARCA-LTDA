@@ -62,7 +62,8 @@ def login(index):
 def create_employee(index):
     button('+ Nuevo funcionario')
     f = form('Alta de funcionario')
-    fill(f, {'code': fixture['codes'][index], 'name': 'Funcionario UI sintético ' + str(index),
+    assert not f.find_elements(By.NAME, 'code')
+    fill(f, {'name': 'Funcionario UI sintético ' + str(index),
              'hiredAt': '2020-01-01', 'departmentId': fixture['departments'][0]['id'],
              'positionId': fixture['positions'][0]['id'], 'salary': '5000.10', 'currency': 'BOB'})
     button('Registrar funcionario', f)
@@ -131,7 +132,7 @@ try:
     button('Cerrar sesión ↗')
     login(1)
     search = driver.find_element(By.XPATH, '//input[@placeholder="Escriba el nombre o código"]')
-    search.send_keys(fixture['codes'][1])
+    search.send_keys('Funcionario UI sintético 1')
     wait.until(lambda d: len(d.find_elements(By.XPATH, '//tbody/tr')) == 1)
     button('Ver ficha')
     wait.until(EC.presence_of_element_located((By.XPATH, '//h2[normalize-space(.)="Funcionario UI sintético 1"]')))
