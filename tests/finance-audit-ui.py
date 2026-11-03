@@ -1,4 +1,5 @@
 import os
+import subprocess
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
@@ -20,6 +21,16 @@ try:
     month = browser.execute_script("return new Intl.DateTimeFormat('sv-SE',{timeZone:'America/La_Paz'}).format(new Date()).slice(0,7)")
     wait.until(lambda d: d.execute_script('return performance.getEntriesByType("resource").some(e=>e.name.includes("payments/summary?period="+arguments[0]))', month))
     assert month in browser.find_element(By.CSS_SELECTOR, '.stats').text
+    wait.until(lambda d: 'consultado' in d.find_element(By.CSS_SELECTOR, '.stats').text)
+    try:
+        subprocess.run(['docker','compose','stop','payment-service'], check=True, capture_output=True, text=True)
+        browser.refresh()
+        wait.until(lambda d: any('Boletas del periodo' in e.text and 'No disponible' in e.text and 'consultado' not in e.text for e in d.find_elements(By.CSS_SELECTOR, '.stats article')))
+    finally:
+        subprocess.run(['docker','compose','up','-d','--no-build','--no-deps','--wait','payment-service'], check=True, capture_output=True, text=True)
+    browser.refresh()
+    wait.until(lambda d: any('Boletas del periodo' in e.text and month in e.text and 'consultado' in e.text for e in d.find_elements(By.CSS_SELECTOR, '.stats article')))
+    print('Finance unavailable summary and recovery UI PASS')
     print('Finance current-period summary UI PASS')
     assert not browser.find_elements(By.XPATH, '//nav//button[contains(.,"Personal")]')
     assert browser.find_elements(By.XPATH, '//nav//button[contains(.,"Boletas")]')
