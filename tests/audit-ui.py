@@ -4,6 +4,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import Select, WebDriverWait
+from selenium.common.exceptions import ElementClickInterceptedException
 
 access = Path('.runtime/initial-access.txt').read_text(encoding='utf-8')
 email = re.search(r'^Correo: (.+)$', access, re.M).group(1)
@@ -34,7 +35,11 @@ try:
     wait.until(lambda d: 'Días laborables del horario semanal' in d.page_source)
     assert len(browser.find_elements(By.CSS_SELECTOR, 'input[type=checkbox]:checked')) >= 5
     print('vacation schedule UI PASS')
-    browser.find_element(By.XPATH, '//nav//button[contains(.,"Mi cuenta")]').click()
+    try:
+        browser.find_element(By.XPATH, '//nav//button[contains(.,"Mi cuenta")]').click()
+    except ElementClickInterceptedException:
+        print('Intercepting element:', browser.execute_script('return document.elementFromPoint(102,476)?.outerHTML?.slice(0,300)'))
+        raise
     wait.until(lambda d: 'Perfil de acceso' in d.page_source)
     assert 'Servicio no disponible' not in browser.page_source
     print('account UI PASS')
