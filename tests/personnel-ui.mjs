@@ -4,7 +4,7 @@ import {mkdir,writeFile,unlink} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
 import argon from 'argon2';
 const require=createRequire(import.meta.url),staff=new(require('../apps/personnel-service/generated/client').PrismaClient)(),identity=new(require('../apps/identity-service/generated/client').PrismaClient)();
-const run=randomUUID(),password=randomUUID()+'-Aa1!',users=[],departments=[],positions=[],codes=['U-'+run,'R-'+run];
+const run=randomUUID(),password=randomUUID()+'-Aa1!',users=[],departments=[],positions=[],codes=['U-'+run,'R-'+run,'C-'+run];
 const inputFile='.runtime/personnel-ui-'+run+'.json';
 let beforePolicies=[];
 try{

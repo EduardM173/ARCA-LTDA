@@ -56,7 +56,7 @@ def login(index):
     button('Iniciar sesión →')
     wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '.stats')))
     driver.find_element(By.XPATH, '//nav/button[normalize-space(.)="◇ Personal" or contains(.,"Personal")]').click()
-    wait.until(EC.presence_of_element_located((By.XPATH, '//h2[normalize-space(.)="Personal de la organización"]')))
+    wait.until(EC.presence_of_element_located((By.XPATH, '//h2[normalize-space(.)="Funcionarios"]')))
 
 
 def create_employee(index):
@@ -72,6 +72,15 @@ def create_employee(index):
 try:
     login(0)
     create_employee(0)
+    f = form('Corregir datos básicos')
+    fill(f, {'code': fixture['codes'][2], 'name': 'Nombre UI corregido', 'document': 'DOC-UI-CORREGIDO',
+             'reason': 'Rectificación sintética de error de captura autorizada'})
+    button('Revisar corrección', f)
+    confirm()
+    wait.until(lambda d: 'Datos corregidos' in d.find_element(By.TAG_NAME, 'body').text)
+    wait.until(EC.presence_of_element_located((By.XPATH, '//h2[normalize-space(.)="Nombre UI corregido"]')))
+    assert 'Rectificación sintética de error de captura autorizada' in driver.find_element(By.TAG_NAME, 'body').text
+    print('PASS navegador Personal: corrección de datos con confirmación e historial')
     f = form('Área y cargo')
     fill(f, {'departmentId': fixture['departments'][1]['id'], 'positionId': fixture['positions'][1]['id']})
     button('Guardar asignación vigente hoy', f)
@@ -102,7 +111,7 @@ try:
     button('Revisar baja', f)
     confirm()
     wait.until(lambda d: 'Baja registrada' in d.find_element(By.TAG_NAME, 'body').text)
-    button('Políticas de Personal')
+    button('Revisar políticas')
     f = form('Registrar una nueva aprobación')
     fill(f, {'allowRetroactiveSalary': 'false', 'allowReentry': 'true', 'compensationPoint': 'SINGLE'})
     button('Revisar aprobación', f)

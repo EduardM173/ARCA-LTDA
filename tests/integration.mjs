@@ -60,6 +60,21 @@ try{
  const issued=(await request('payments/'+pay.id+'/issue','POST',{},finance,201)).data;assert.equal(issued.status,'EMITIDO');
  await request('payments/'+pay.id+'/record-payment','POST',{date:today,reference:'SINTETICO '+run,evidence:'Referencia sintética de integración, no transferencia bancaria'},finance,201);
  const slip=(await request('payments/'+pay.id+'/pdf','GET',undefined,finance)).data;await writeFile('.runtime/test-evidence/payment.pdf',slip);pass('aritmética decimal y emisión distinta de pago');
+ const identityBefore=await clients.personnel.employee.findUniqueOrThrow({where:{id:e.id}});
+ const identityReason='Corrección sintética de captura con autorización administrativa';
+ const corrected={code:'C-'+run,name:'Nombre corregido de integración',document:'DOC-'+run,email:'corregido-'+run+'@example.invalid'};
+ await request('employees/'+e.id+'/identity','PATCH',{version:identityBefore.version,reason:identityReason,...corrected},approver,403);
+ await request('employees/'+e.id+'/identity','PATCH',{version:identityBefore.version,reason:identityReason,code:newer.code},admin,409);
+ await request('employees/'+e.id+'/identity','PATCH',{version:identityBefore.version,reason:identityReason,name:corrected.name,salary:'99999'},admin,422);
+ const correction=(await request('employees/'+e.id+'/identity','PATCH',{version:identityBefore.version,reason:identityReason,...corrected},admin)).data;
+ assert.equal(correction.version,identityBefore.version+1);for(const [field,value] of Object.entries(corrected))assert.equal(correction[field],value);
+ await request('employees/'+e.id+'/identity','PATCH',{version:identityBefore.version,reason:identityReason,name:'Versión obsoleta'},admin,409);
+ const correctionEvent=await clients.personnel.employmentEvent.findFirstOrThrow({where:{employeeId:e.id,action:'CORRECCION_DATOS'},orderBy:{createdAt:'desc'}});
+ assert.equal(correctionEvent.data.reason,identityReason);assert.equal(correctionEvent.data.before.code,input.code);assert.equal(correctionEvent.data.after.code,corrected.code);
+ assert.deepEqual((await request('contracts/'+c.id+'/pdf','GET',undefined,admin)).data,pdf);
+ assert.deepEqual((await request('payments/'+pay.id+'/pdf','GET',undefined,finance)).data,slip);
+ assert.equal((await clients.contract.contract.findUniqueOrThrow({where:{id:c.id}})).snapshot.name,input.name);
+ pass('H18 corrección controlada, unicidad, versión, permiso, historial y PDF inmutable');
  if(process.env.DOCKER_DEPENDENCY_TEST==='true'){
   const previous=new Date(today+'T00:00:00Z');previous.setUTCMonth(previous.getUTCMonth()-1);
   const dependent=(await request('payments','POST',{employeeId:e.id,period:previous.toISOString().slice(0,7),lines:[{concept:conceptA.name,type:'ABONO',amount:'0.20'}]},finance,201)).data;payments.push(dependent.id);
