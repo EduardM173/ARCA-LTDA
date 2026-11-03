@@ -8,14 +8,14 @@ const m=JSON.parse(await readFile('.runtime/demo-manifest.json','utf8'));
 const catalogs=JSON.parse(await readFile('.runtime/demo-catalogs.json','utf8'));
 const db=Object.fromEntries(['identity','personnel','vacation','contract','payment'].map(n=>[n,new(require(`../apps/${n}-service/generated/client`).PrismaClient)()]));
 const ids=prefix=>Object.entries(m).filter(([k,v])=>new RegExp('^'+prefix+'\\d+$').test(k)&&typeof v==='string'&&/^[0-9a-f-]{36}$/i.test(v)).map(([,v])=>v);
-const contractIds=ids('contract'),paymentIds=ids('payment'),leaveIds=ids('leave');
+const contractIds=[...ids('contract'),...(m.contractRectified?[m.contractRectified]:[])],paymentIds=[...ids('payment'),...(m.paymentCorrected?[m.paymentCorrected]:[])],leaveIds=[...ids('leave'),...ids('leaveExtra')];
 const employees=await db.personnel.employee.findMany({where:{code:{startsWith:'DEMO-ARCA-'}},select:{id:true}}),employeeIds=employees.map(e=>e.id);
 const users=await db.identity.user.findMany({where:{email:{endsWith:'@demo.arca.test'}},select:{id:true}}),userIds=users.map(u=>u.id);
 const summary={users:userIds.length,employees:employeeIds.length,contracts:contractIds.length,payments:paymentIds.length,leaves:leaveIds.length};
 try{
  if(process.argv[2]!=='--confirm=DELETE-DEMO-ARCA'){console.log('Solo simulación; no se eliminó nada:',JSON.stringify(summary));process.exitCode=0}
  else{
-  if(summary.users!==30||summary.employees!==120||summary.contracts!==45||summary.payments!==80||summary.leaves!==60)throw Error('Conteos inesperados: se detiene la limpieza para inspección manual');
+  if(summary.users!==30||summary.employees!==120||summary.contracts!==46||summary.payments!==81||summary.leaves!==70)throw Error('Conteos inesperados: se detiene la limpieza para inspección manual');
   if(await db.contract.contract.count({where:{id:{in:contractIds},employeeId:{notIn:employeeIds}}})||await db.payment.payment.count({where:{id:{in:paymentIds},employeeId:{notIn:employeeIds}}})||await db.vacation.leaveRequest.count({where:{id:{in:leaveIds},employeeId:{notIn:employeeIds}}}))throw Error('El manifiesto contiene relaciones ajenas al fixture');
   if(await db.contract.contract.count({where:{employeeId:{in:employeeIds},id:{notIn:contractIds}}})||await db.payment.payment.count({where:{employeeId:{in:employeeIds},id:{notIn:paymentIds}}})||await db.vacation.leaveRequest.count({where:{employeeId:{in:employeeIds},id:{notIn:leaveIds}}})||await db.vacation.leaveRequest.count({where:{policyId:m.vacationPolicy,id:{notIn:leaveIds}}}))throw Error('Hay registros ajenos relacionados con datos demo; no se eliminarán automáticamente');
   if(await db.personnel.employee.count({where:{id:{notIn:employeeIds},OR:[{departmentId:{in:catalogs.departments}},{positionId:{in:catalogs.positions}}]}}))throw Error('Hay funcionarios ajenos asociados a catálogos demo; se detiene limpieza');

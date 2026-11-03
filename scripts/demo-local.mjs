@@ -1,6 +1,7 @@
 // Local academic fixture. Never run with a non-loopback database or in production.
 import {createRequire} from 'node:module';
 import {randomBytes} from 'node:crypto';
+import {spawnSync} from 'node:child_process';
 import {readFile,writeFile} from 'node:fs/promises';
 import argon from 'argon2';
 const require=createRequire(import.meta.url);
@@ -22,6 +23,7 @@ const email=i=>`demo${String(i+1).padStart(2,'0')}@demo.arca.test`;
 const code=i=>`DEMO-ARCA-${String(i+1).padStart(3,'0')}`;
 const permissions=roles=>[...(roles.includes('ADMIN')?['users.manage','salary.read','salary.write','employee.ratify','contracts.issue']:[]),...(roles.includes('FINANCE')?['payments.issue','payments.record']:[]),...(roles.includes('APPROVER')?['vacations.approve']:[])];
 const names=['Quispe','Mamani','Choque','Condori','Huanca','Poma','Flores','Vargas','Rojas','Arce','Torres','Rivero'];
+function protectCredentials(){if(process.platform!=='win32')return;const account=`${process.env.USERDOMAIN}\\${process.env.USERNAME}`;const result=spawnSync('icacls',[file,'/inheritance:r','/grant:r',`${account}:(F)`,'NT AUTHORITY\\SYSTEM:(F)','BUILTIN\\Administrators:(F)'],{encoding:'utf8'});if(result.status!==0)throw Error('No se pudo restringir el acceso local al archivo de credenciales')}
 async function run(){safe();
  const existing=await readFile(file,'utf8').catch(()=>null);
  if(action==='seed'){
@@ -46,10 +48,10 @@ async function run(){safe();
   }
   for(let i=0;i<120;i++){
    const name=i<people.length?people[i][0]:`${['Ana','María','José','Luis','Carmen','Pedro','Elena','Raúl','Teresa','Mario'][i%10]} ${names[i%names.length]} ${names[(i+5)%names.length]}`;
-   const year=i%9===0?2026:2013+(i%12),hiredAt=new Date(Date.UTC(year,Math.min(i%12+1,10),Math.min(20,1+i%25)));
+   const year=i%9===0?2026:2013+(i%12),hiredAt=i===99?new Date(Date.UTC(2020,1,29)):new Date(Date.UTC(year,Math.min(i%12,9),Math.min(20,1+i%25)));
    const actor=(await identity.user.findUniqueOrThrow({where:{email:email(0)}})).id;
-   const employee=await personnel.employee.findUnique({where:{code:code(i)}});if(employee){if(employee.hiredAt>new Date()){const corrected=new Date(Date.UTC(2026,9,Math.min(20,1+i%25)));await personnel.$transaction([personnel.employee.update({where:{id:employee.id},data:{hiredAt:corrected,ratifiedAt:employee.ratifiedAt&&employee.ratifiedAt>new Date()?null:employee.ratifiedAt}}),personnel.salary.updateMany({where:{employeeId:employee.id,effectiveAt:employee.hiredAt},data:{effectiveAt:corrected}}),personnel.employmentPeriod.updateMany({where:{employeeId:employee.id,startsAt:employee.hiredAt},data:{startsAt:corrected}})])}continue;}
-   const inactive=i%17===0,ratified=i%11===0?null:new Date(Date.UTC(year,Math.min(11,i%12+2),1));
+   const employee=await personnel.employee.findUnique({where:{code:code(i)}});if(employee){if(employee.hiredAt>new Date()||i===99&&employee.hiredAt.toISOString().slice(0,10)!=='2020-02-29'){const corrected=i===99?hiredAt:new Date(Date.UTC(2026,9,Math.min(20,1+i%25)));await personnel.$transaction([personnel.employee.update({where:{id:employee.id},data:{hiredAt:corrected,ratifiedAt:i===99?new Date(Date.UTC(2020,3,15)):null}}),personnel.salary.updateMany({where:{employeeId:employee.id,effectiveAt:employee.hiredAt},data:{effectiveAt:corrected}}),personnel.employmentPeriod.updateMany({where:{employeeId:employee.id,startsAt:employee.hiredAt},data:{startsAt:corrected}})])}else if(employee.ratifiedAt&&employee.ratifiedAt<employee.hiredAt){const corrected=new Date(employee.hiredAt.getTime()+45*86400000);await personnel.employee.update({where:{id:employee.id},data:{ratifiedAt:corrected>new Date()?null:corrected}})}continue;}
+   const inactive=i%17===0,proposedRatification=new Date(hiredAt.getTime()+45*86400000),ratified=i%11===0||proposedRatification>new Date()?null:proposedRatification;
    await personnel.employee.create({data:{code:code(i),name,document:`DEMO-DOC-${String(i+1).padStart(4,'0')}`,email:i<30?email(i):null,hiredAt,ratifiedAt:ratified,status:inactive?'BAJA':'ACTIVO',terminatedAt:inactive?new Date(Date.UTC(2026,9,1)):null,terminationReason:inactive?'Baja sintética de demostración':null,departmentId:departments[i%8].id,positionId:positions[i%16].id,currency:'BOB',salaries:{create:{amount:(3500+(i%16)*370).toFixed(2),effectiveAt:hiredAt,actor}},periods:{create:{startsAt:hiredAt,endsAt:inactive?new Date(Date.UTC(2026,9,1)):null,actor}}}});
   }
   const ids=(await personnel.employee.findMany({where:{code:{startsWith:'DEMO-ARCA-'}},select:{id:true}})).map(e=>e.id);
@@ -57,6 +59,7 @@ async function run(){safe();
   if(!lines.some(x=>x.startsWith('## Uso local'))){lines.push('','## Uso local','','Inicie ARCA RH en http://localhost:5173, use cualquiera de los correos y contraseñas de la tabla y cierre sesión antes de alternar perfiles. Las cuentas no tienen correo entregable: la recuperación por SMTP no se aplica a estos perfiles ficticios.','', 'Con PostgreSQL publicado únicamente en 127.0.0.1:55432 mediante `compose.dev.yaml`, establezca `$env:DEMO_LOCAL_ENABLE="yes"` en PowerShell y ejecute `pnpm demo:seed` para completar datos faltantes o `pnpm demo:verify` para comprobarlos. `pnpm demo:reset` solo muestra el inventario; la eliminación exacta requiere `node --env-file=.env scripts/demo-reset.mjs --confirm=DELETE-DEMO-ARCA`. Conserve este archivo hasta completar la limpieza: las contraseñas no se pueden recuperar desde sus hashes.');await writeFile(file,lines.join('\n')+'\n',{mode:0o600})}
   const described=lines.map(line=>{const match=line.match(/^\| (\d+) \|/);if(!match)return line;const roles=people[Number(match[1])-1]?.[1].split(',')||[],abilities=[...(roles.includes('ADMIN')?['usuarios, catálogos, políticas y Personal']:[]),...(roles.includes('HR')?['funcionarios y solicitudes de vacaciones']:[]),...(roles.includes('APPROVER')?['aprobar o rechazar vacaciones según ámbito']:[]),...(roles.includes('FINANCE')?['boletas, conceptos y pagos simulados']:[]),...(roles.includes('BOARD')?['indicadores institucionales']:[])];const cells=line.split('|');cells[8]=' '+(Number(match[1])===30?'rechazo de inicio de sesión':abilities.join('; '))+' ';return cells.join('|')});
   await writeFile(file,described.map(line=>line.startsWith('Regeneración idempotente:')?'Con PostgreSQL publicado únicamente en 127.0.0.1:55432 mediante `compose.dev.yaml`, establezca `$env:DEMO_LOCAL_ENABLE="yes"` en PowerShell y ejecute `pnpm demo:seed` para completar datos faltantes o `pnpm demo:verify` para comprobarlos. `pnpm demo:reset` solo muestra el inventario; la eliminación exacta requiere `node --env-file=.env scripts/demo-reset.mjs --confirm=DELETE-DEMO-ARCA`. Conserve este archivo hasta completar la limpieza: las contraseñas no se pueden recuperar desde sus hashes.':line).join('\n').trimEnd()+'\n',{mode:0o600});
+  protectCredentials();
   console.log('Datos locales de identidad, catálogos y Personal cargados.');
  }else if(action==='verify'){
   if(!existing)throw Error('Falta README_DEMO_LOCAL.md');const users=await identity.user.findMany({where:{email:{endsWith:'@demo.arca.test'}}});const employees=await personnel.employee.count({where:{code:{startsWith:'DEMO-ARCA-'}}});

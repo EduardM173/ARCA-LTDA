@@ -18,6 +18,7 @@ export async function deliver(){
  for(const job of jobs){
  const claim=await db.mailDelivery.updateMany({where:{id:job.id,attempts:job.attempts,OR:[{leaseUntil:null},{leaseUntil:{lt:new Date()}}]},data:{status:'ENVIANDO',leaseUntil:new Date(Date.now()+60000),attempts:{increment:1}}});if(!claim.count)continue;
  try{const recipient=await db.user.findUnique({where:{id:job.recipientId}}),payload=decrypt(job.encryptedPayload);
+ if(recipient?.email.toLowerCase().endsWith('@demo.arca.test')){await db.mailDelivery.update({where:{id:job.id},data:{status:'ERROR',leaseUntil:null,lastError:'DEMO_RECIPIENT_SUPPRESSED',encryptedPayload:''}});continue}
  if(!recipient?.active||payload.kind!=='VERIFY'&&!recipient.verifiedAt)throw new Error('RECIPIENT_NOT_VERIFIED');
  if(payload.kind==='VACATION'){if(!payload.departmentId||!recipient.scopeAll&&!recipient.departmentIds.includes(payload.departmentId))throw new Error('RECIPIENT_SCOPE_REVOKED');if(payload.requiredRole==='APPROVER'&&(!recipient.roles.includes('APPROVER')||!recipient.permissions.includes('vacations.approve')))throw new Error('RECIPIENT_PERMISSION_REVOKED');if(payload.requiredRole!=='APPROVER'&&!recipient.roles.some(r=>['ADMIN','HR','APPROVER'].includes(r)))throw new Error('RECIPIENT_PERMISSION_REVOKED')}
  const t=transport();try{const info=await t.sendMail({from:process.env.SMTP_FROM,to:recipient.email,messageId:`<${job.id}@arca-rh.local>`,subject:payload.subject,text:payload.text});if(!info.accepted?.length)throw new Error('SMTP_NOT_ACCEPTED')}finally{t.close()}
