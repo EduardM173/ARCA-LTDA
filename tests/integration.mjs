@@ -25,7 +25,7 @@ async function request(path,method='GET',body,cookie='',expected=200){
  return {data,res};
 }
 async function login(roles){const u=await clients.identity.user.create({data:{email:`test-${users.length}-${run}@example.invalid`,passwordHash:await argon.hash(password),roles,scopeAll:true,permissions:roles.includes('ADMIN')?['users.manage','salary.read','salary.write','employee.ratify','contracts.issue']:roles.includes('FINANCE')?['payments.issue','payments.record']:roles.includes('APPROVER')?['vacations.approve']:[]}});users.push(u.id);return (await request('auth/login','POST',{email:u.email,password},'',201)).res.headers.get('set-cookie').split(';')[0]}
-const today=new Date().toISOString().slice(0,10);let steps=0;const pass=s=>{console.log('PASS '+s);steps++};
+const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/La_Paz',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());let steps=0;const pass=s=>{console.log('PASS '+s);steps++};
 try{
  const admin=await login(['ADMIN','HR']),approver=await login(['APPROVER']),finance=await login(['FINANCE']),board=await login(['BOARD']);
  await request('employees','GET',undefined,'',401);pass('sesión obligatoria');
@@ -78,6 +78,7 @@ try{
     if(result.status!==0)cleanupErrors.push(new Error('Container fixture PDF cleanup failed: '+service));
    }
   }else for(const id of [...contracts,...payments]){try{await unlink('.runtime/documents/local/'+id+'.pdf')}catch(error){if(error.code!=='ENOENT')cleanupErrors.push(error)}}
+ for(const file of ['.runtime/test-evidence/contract.pdf','.runtime/test-evidence/payment.pdf']){try{await unlink(file)}catch(error){if(error.code!=='ENOENT')cleanupErrors.push(error)}}
  }finally{await Promise.all(Object.values(clients).map(c=>c.$disconnect()));}
  if(cleanupErrors.length)throw new AggregateError(cleanupErrors,'Fixture PDFs could not be fully cleaned');
 }

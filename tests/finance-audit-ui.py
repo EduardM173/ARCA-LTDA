@@ -19,6 +19,12 @@ try:
     wait.until(lambda d: 'Cerrar sesión' in d.page_source)
     assert not browser.find_elements(By.XPATH, '//nav//button[contains(.,"Personal")]')
     assert browser.find_elements(By.XPATH, '//nav//button[contains(.,"Boletas")]')
+    browser.find_element(By.XPATH, '//nav//button[contains(.,"Boletas")]').click()
+    wait.until(lambda d: 'Boletas y pagos' in d.page_source)
+    wait.until(lambda d: 'No hay conceptos activos' in d.page_source)
+    assert not browser.find_element(By.XPATH, '//button[contains(.,"Preparar boleta")]').is_enabled()
+    assert 'Servicio no disponible' not in browser.page_source
+    print('Finance payment prerequisites UI PASS')
     browser.find_element(By.XPATH, '//nav//button[contains(.,"Administración")]').click()
     wait.until(lambda d: 'Auditoría por dominio' in d.page_source)
     assert browser.find_element(By.XPATH, '//label[contains(.,"Dominio")]/select').get_attribute('value') == 'payments'
