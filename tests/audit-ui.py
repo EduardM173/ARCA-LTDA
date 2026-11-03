@@ -55,6 +55,19 @@ try:
     wait.until(lambda d: 'Perfil de acceso' in d.page_source)
     assert 'Servicio no disponible' not in browser.page_source
     print('account UI PASS')
+    browser.find_element(By.NAME, 'currentPassword').send_keys('sin-enviar')
+    browser.find_element(By.XPATH, '//nav/button[contains(.,"Inicio")]').click()
+    wait.until(lambda d: 'Cambios sin guardar' in d.find_element(By.CSS_SELECTOR, '[role="dialog"]').text)
+    browser.find_element(By.XPATH, '//button[normalize-space()="Seguir editando"]').click()
+    assert browser.find_element(By.NAME, 'currentPassword').get_attribute('value') == 'sin-enviar'
+    browser.find_element(By.XPATH, '//header//button[contains(.,"Cerrar sesión")]').click()
+    wait.until(lambda d: '¿Deseas cerrar la sesión?' in d.find_element(By.CSS_SELECTOR, '[role="dialog"]').text)
+    browser.find_element(By.XPATH, '//button[normalize-space()="Seguir editando"]').click()
+    assert browser.find_element(By.NAME, 'currentPassword').get_attribute('value') == 'sin-enviar'
+    browser.find_element(By.XPATH, '//nav/button[contains(.,"Inicio")]').click()
+    browser.find_element(By.XPATH, '//button[normalize-space()="Descartar y continuar"]').click()
+    wait.until(lambda d: 'Resumen de trabajo' in d.page_source)
+    print('unsaved account form navigation UI PASS')
     browser.execute_cdp_cmd('Emulation.setDeviceMetricsOverride', {'width':375,'height':900,'deviceScaleFactor':1,'mobile':False})
     wait.until(lambda d: d.execute_script('return innerWidth') == 375)
     menu = browser.find_element(By.CSS_SELECTOR, '.mobile-menu-toggle')
