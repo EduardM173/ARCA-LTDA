@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Req, Body, Param, Query, ConflictException, BadRequestException, ForbiddenException, Res } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Req, Body, Param, Query, ConflictException, BadRequestException, ForbiddenException, Res } from '@nestjs/common';
 import { PrismaClient } from '../generated/client';
 import { start, authorize, call, date, Actor, identity, assertDepartment, departmentWhere, requirePermission, businessToday, currentRequestId } from '../../../packages/platform/src/http';
 import { z } from 'zod';
@@ -159,38 +159,34 @@ export class VacationController {
     return this.decide(req, id, 'RECHAZADA', reason);
   }
 
-  async decide(req: any, id: string, status: string, reason?: string) {
-    const a = await authorize(req, 'vacation', ['APPROVER']);
-    requirePermission(a, 'vacations.approve');
+  /**
+   * HU-17 (ARCA-17): decisión unificada de aprobación/rechazo.
+   * Acepta { decision, rejectionReason? } y también el alias { reason }.
+   */
+  @Patch('vacations/requests/:id/decision')
+  async decision(@Req() req: any, @Param('id') id: string, @Body() body: unknown) {
+    const i = z.object({
+      decision: z.enum(['APROBADA', 'RECHAZADA']),
+      rejectionReason: z.string().trim().max(500).nullable().optional(),
+      reason: z.string().trim().max(500).nullable().optional(),
+    }).strict().parse(body);
+    return this.decide(req, id, i.decision, i.rejectionReason ?? i.reason ?? undefined);
+  }
+
+  async decide(req: any, id: string, status: 'APROBADA' | 'RECHAZADA', reason?: string) {
+    const a = await authorize(req, 'vacation', ['APPROVER', 'ADMIN', 'HR']);
+    if (!a.roles.some(role => role === 'ADMIN' || role === 'HR')) {
+      requirePermission(a, 'vacations.approve');
+    }
+    const requestId = uuid.parse(id);
     return db.$transaction(async tx => {
-      const initial = await tx.leaveRequest.findUniqueOrThrow({ where: { id: uuid.parse(id) } });
+      const initial = await tx.leaveRequest.findUniqueOrThrow({ where: { id: requestId } });
       assertDepartment(a, initial.departmentId || undefined);
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${initial.employeeId}))`;
-      const r = await tx.leaveRequest.findUniqueOrThrow({ where: { id } });
-      if (r.createdBy === a.id) throw new ConflictException('No puede decidir su propia solicitud');
-      if (r.status === status) return r;
-      if (r.status !== 'PENDIENTE') throw new ConflictException('Solicitud ya decidida');
-      if (status === 'APROBADA') {
-        const b = await this.vacationsService.checkEligibility(r.employeeId, a, tx, r.id);
-        assertDepartment(a, b.departmentId);
-        if (r.tenureKey !== b.tenureKey) throw new ConflictException('El periodo laboral cambió; requiere nueva solicitud');
-        if (!b.eligible || r.days > b.available) throw new ConflictException('Funcionario no elegible o saldo insuficiente');
-        if (b.policy.id !== r.policyId) throw new ConflictException('La política cambió; rechace y registre una nueva solicitud');
-        let remaining = r.days;
-        for (const bucket of b.buckets || []) {
-          const used = Math.min(remaining, bucket.granted - bucket.used);
-          if (used > 0) {
-            await tx.movement.create({ data: { employeeId: r.employeeId, requestId: id, tenureKey: b.tenureKey!, serviceYear: bucket.year, days: used, kind: 'CONSUMO', actor: a.id } });
-            remaining -= used;
-          }
-          if (!remaining) break;
-        }
-        if (remaining) throw new ConflictException('Saldo inconsistente');
-      }
-      const result = await tx.leaveRequest.update({ where: { id }, data: { status, decidedBy: a.id, reason, version: { increment: 1 } } });
-      await tx.outbox.create({ data: { requestId: id, event: status } });
-      await audit(tx, a.id, status, id, r.employeeId);
-      return result;
+      const r = await this.vacationsService.decideRequest(tx, requestId, status, reason, a);
+      await tx.outbox.create({ data: { requestId, event: status } });
+      await audit(tx, a.id, status, requestId, r.employeeId);
+      return r;
     });
   }
 

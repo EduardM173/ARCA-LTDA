@@ -5,8 +5,11 @@ import { VacationEligibilityResponseDto, VacationPeriodDto } from './dto/vacatio
 import {
   CreateVacationRequestInput,
   LeaveRequestResponseDto,
+  VacationDecision,
   INSUFFICIENT_VACATION_BALANCE,
+  INSUFFICIENT_VACATION_BALANCE_FOR_APPROVAL,
   OVERLAPPING_VACATION_REQUEST,
+  REJECTION_REASON_REQUIRED,
   toLeaveRequestResponse,
 } from './dto/leave-request-response.dto';
 import { countDays } from './calendar';
@@ -296,6 +299,100 @@ export class VacationsService {
     });
 
     return toLeaveRequestResponse(created, { startDate, endDate, daysRequested });
+  }
+
+  /**
+   * HU-17 (ARCA-17): Aprobar o rechazar una solicitud dentro de una transacción.
+   * El llamador debe invocar este método dentro de prisma.$transaction y con el
+   * bloqueo asesor del funcionario adquirido para garantizar el control T08.
+   */
+  async decideRequest(
+    tx: any,
+    requestId: string,
+    decision: VacationDecision,
+    rejectionReason?: string | null,
+    actor?: Actor
+  ): Promise<LeaveRequestResponseDto> {
+    if (decision !== 'APROBADA' && decision !== 'RECHAZADA') {
+      throw new BadRequestException('Decisión inválida');
+    }
+
+    const request = await tx.leaveRequest.findUniqueOrThrow({ where: { id: requestId } });
+    if (actor) {
+      assertDepartment(actor, request.departmentId || undefined);
+      if (request.createdBy === actor.id) {
+        throw new ConflictException('No puede decidir su propia solicitud');
+      }
+    }
+    if (request.status !== 'PENDIENTE') {
+      throw new ConflictException('Solicitud ya decidida');
+    }
+
+    if (decision === 'RECHAZADA') {
+      const reason = String(rejectionReason ?? '').trim();
+      if (!reason) {
+        throw new BadRequestException(REJECTION_REASON_REQUIRED);
+      }
+      const rejected = await tx.leaveRequest.update({
+        where: { id: requestId },
+        data: {
+          status: 'RECHAZADA',
+          reason,
+          decidedBy: actor?.id ?? 'system',
+          version: { increment: 1 },
+        },
+      });
+      return toLeaveRequestResponse(rejected);
+    }
+
+    const balance = await this.checkEligibility(request.employeeId, actor, tx, request.id);
+    if (!balance.eligible) {
+      throw new BadRequestException(balance.reason || 'El funcionario no es elegible para vacaciones');
+    }
+    if (request.tenureKey !== balance.tenureKey) {
+      throw new ConflictException('El periodo laboral cambió; requiere nueva solicitud');
+    }
+
+    const availableDays = balance.availableDays ?? balance.available ?? 0;
+    if (request.days > availableDays) {
+      throw new UnprocessableEntityException(INSUFFICIENT_VACATION_BALANCE_FOR_APPROVAL);
+    }
+    if (!balance.policy || balance.policy.id !== request.policyId) {
+      throw new ConflictException('La política cambió; rechace y registre una nueva solicitud');
+    }
+
+    let remaining = request.days;
+    for (const bucket of balance.buckets || []) {
+      const used = Math.min(remaining, bucket.granted - bucket.used);
+      if (used > 0) {
+        await tx.movement.create({
+          data: {
+            employeeId: request.employeeId,
+            requestId,
+            tenureKey: balance.tenureKey!,
+            serviceYear: bucket.year,
+            days: used,
+            kind: 'CONSUMO',
+            actor: actor?.id ?? 'system',
+          },
+        });
+        remaining -= used;
+      }
+      if (!remaining) break;
+    }
+    if (remaining) {
+      throw new ConflictException('Saldo inconsistente');
+    }
+
+    const approved = await tx.leaveRequest.update({
+      where: { id: requestId },
+      data: {
+        status: 'APROBADA',
+        decidedBy: actor?.id ?? 'system',
+        version: { increment: 1 },
+      },
+    });
+    return toLeaveRequestResponse(approved);
   }
 }
 

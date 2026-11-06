@@ -25,8 +25,18 @@ export interface LeaveRequestResponseDto {
   policyId?: string;
 }
 
+export interface DecideVacationRequestInput {
+  requestId: string;
+  decision: 'APROBADA' | 'RECHAZADA';
+  rejectionReason?: string | null;
+}
+
+export type VacationDecision = 'APROBADA' | 'RECHAZADA';
+
 export const INSUFFICIENT_VACATION_BALANCE = 'Saldo de vacaciones insuficiente para el periodo solicitado';
+export const INSUFFICIENT_VACATION_BALANCE_FOR_APPROVAL = 'Saldo de vacaciones insuficiente para aprobar la solicitud';
 export const OVERLAPPING_VACATION_REQUEST = 'El funcionario ya cuenta con una solicitud o periodo de vacaciones registrado en las fechas seleccionadas';
+export const REJECTION_REASON_REQUIRED = 'El motivo de rechazo es obligatorio';
 
 function isoDay(value: any): string {
   if (!value) return '';
