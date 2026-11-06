@@ -15,6 +15,17 @@ model Template {
  active Boolean @default(true)
  @@unique([name,version])
 }
+model ContractTemplate {
+ id String @id @default(uuid()) @db.Uuid
+ title String
+ body String
+ version Int @default(1)
+ status String @default("ACTIVE")
+ createdAt DateTime @default(now()) @db.Timestamptz
+ updatedAt DateTime @updatedAt @db.Timestamptz
+ @@map("contract_templates")
+ @@index([title, version])
+}
 model Contract {
  id String @id @default(uuid()) @db.Uuid
  employeeId String @db.Uuid

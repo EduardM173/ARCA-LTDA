@@ -18,7 +18,8 @@
     "demo:reset": "node --env-file=.env scripts/demo-reset.mjs",
     "test": "node --env-file=.env tests/integration.mjs",
     "test:hu16": "node --import tsx tests/hu16-vacation-request.spec.ts",
-    "test:hu17": "node --import tsx tests/hu17-vacation-decision.spec.ts"
+    "test:hu17": "node --import tsx tests/hu17-vacation-decision.spec.ts",
+    "test:hu18": "node --import tsx tests/hu18-contract-templates.spec.ts"
   },
   "dependencies": {
     "@nestjs/common": "11.2.8",
