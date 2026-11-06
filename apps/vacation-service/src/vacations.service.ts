@@ -1,0 +1,215 @@
+import { Injectable, ConflictException, BadRequestException } from '@nestjs/common';
+import { PrismaClient } from '../generated/client';
+import { call, date, Actor, assertDepartment, businessToday } from '../../../packages/platform/src/http';
+import { VacationEligibilityResponseDto, VacationPeriodDto } from './dto/vacation-eligibility-response.dto';
+import { z } from 'zod';
+
+const uuid = z.uuid();
+
+export function anniversary(h: Date, n: number, leap: string): Date {
+  const year = h.getUTCFullYear() + n;
+  if (h.getUTCMonth() === 1 && h.getUTCDate() === 29 && new Date(Date.UTC(year, 1, 29)).getUTCMonth() !== 1) {
+    if (leap === 'PENDING') throw new ConflictException('Requiere aprobar política para aniversarios del 29 de febrero');
+    return new Date(Date.UTC(year, leap === 'FEB28' ? 1 : 2, leap === 'FEB28' ? 28 : 1));
+  }
+  return new Date(Date.UTC(year, h.getUTCMonth(), h.getUTCDate()));
+}
+
+export function completedYears(hired: string, today: Date): number {
+  const h = new Date(hired);
+  return today.getUTCFullYear() - h.getUTCFullYear() - ((today.getUTCMonth() < h.getUTCMonth() || (today.getUTCMonth() === h.getUTCMonth() && today.getUTCDate() < h.getUTCDate())) ? 1 : 0);
+}
+
+@Injectable()
+export class VacationsService {
+  constructor(private readonly prisma: PrismaClient) {}
+
+  /**
+   * Realiza una llamada HTTP síncrona interna hacia personnel-service
+   * autenticada mediante cabeceras de aserción firmadas (JWT interno con aud=personnel, iss=vacation).
+   */
+  async getEmployeeData(employeeId: string, actor?: Actor) {
+    return call('vacation', 'personnel', '/internal/employees/' + uuid.parse(employeeId), actor);
+  }
+
+  /**
+   * HU-15 (ARCA-15): Consultar elegibilidad y saldo de vacaciones por gestión.
+   * Reglas de negocio:
+   * 1. Consumir internal personnel-service para obtener fecha_ingreso (hiredAt) y ratificado_en (ratifiedAt).
+   * 2. Si ratifiedAt es nulo -> isEligible: false, reason: "El funcionario no ha sido ratificado previamente", availableDays: 0 (T05).
+   * 3. Si antigüedad (hoy - fecha_ingreso) < 365 días -> isEligible: false, reason: "No ha completado una gestión de 365 días", availableDays: 0 (T06).
+   * 4. Si ratificado y antigüedad >= 365 días -> isEligible: true, availableDays: Math.floor(diasAntiguedad / 365) * 15, detalle de periodos (T07).
+   */
+  async checkEligibility(
+    employeeId: string,
+    actor?: Actor,
+    txClient?: any,
+    excludeRequest?: string
+  ): Promise<VacationEligibilityResponseDto> {
+    const tx = txClient || this.prisma;
+    const e = await this.getEmployeeData(employeeId, actor);
+    if (actor) {
+      assertDepartment(actor, e.departmentId);
+    }
+
+    const todayStr = businessToday();
+    const today = date(todayStr);
+    const hire = new Date(e.hiredAt);
+    const diffMs = today.getTime() - hire.getTime();
+    const diasAntiguedad = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+    const tenureKey = e.hiredAt.slice(0, 10);
+
+    // Caso: Funcionario dado de baja
+    if (e.status !== 'ACTIVO') {
+      return {
+        isEligible: false,
+        eligible: false,
+        availableDays: 0,
+        available: 0,
+        reason: 'Funcionario dado de baja',
+        diasAntiguedad,
+        gestiones: 0,
+        totalDays: 0,
+        usedDays: 0,
+        reservedDays: 0,
+        periods: [],
+        buckets: [],
+        employeeVersion: e.version,
+        departmentId: e.departmentId,
+        tenureKey,
+      };
+    }
+
+    // Regla 2 (T05): Sin ratificación previa
+    if (!e.ratifiedAt) {
+      return {
+        isEligible: false,
+        eligible: false,
+        availableDays: 0,
+        available: 0,
+        reason: 'El funcionario no ha sido ratificado previamente',
+        diasAntiguedad,
+        gestiones: Math.floor(diasAntiguedad / 365),
+        totalDays: 0,
+        usedDays: 0,
+        reservedDays: 0,
+        periods: [],
+        buckets: [],
+        employeeVersion: e.version,
+        departmentId: e.departmentId,
+        tenureKey,
+      };
+    }
+
+    // Regla 3 (T06): Antigüedad menor a 365 días
+    if (diasAntiguedad < 365) {
+      return {
+        isEligible: false,
+        eligible: false,
+        availableDays: 0,
+        available: 0,
+        reason: 'No ha completado una gestión de 365 días',
+        diasAntiguedad,
+        gestiones: 0,
+        totalDays: 0,
+        usedDays: 0,
+        reservedDays: 0,
+        periods: [],
+        buckets: [],
+        employeeVersion: e.version,
+        departmentId: e.departmentId,
+        tenureKey,
+      };
+    }
+
+    // Regla 4 (T07): Ratificado con >= 365 días de antigüedad
+    const gestiones = Math.floor(diasAntiguedad / 365);
+    const policy = await tx.policy.findFirst({ orderBy: { approvedAt: 'desc' } });
+    if (!policy) {
+      throw new ConflictException('Requiere configurar y aprobar la política de vacaciones');
+    }
+
+    const leapDay = policy.leapDay || 'FEB28';
+    let years = today.getUTCFullYear() - hire.getUTCFullYear();
+    while (years > 0 && anniversary(hire, years, leapDay) > today) {
+      years--;
+    }
+    const serviceYearsToCount = Math.max(gestiones, years);
+
+    const periods: VacationPeriodDto[] = [];
+    const buckets: any[] = [];
+    const startYear = policy.carryover ? 1 : serviceYearsToCount;
+
+    for (let y = startYear; y <= serviceYearsToCount; y++) {
+      const cycleStart = anniversary(hire, y, leapDay);
+      const cycleEnd = anniversary(hire, y + 1, leapDay);
+
+      const ent = await tx.entitlement.upsert({
+        where: { employeeId_tenureKey_serviceYear: { employeeId, tenureKey, serviceYear: y } },
+        update: {},
+        create: { employeeId, tenureKey, serviceYear: y, cycleStart, policyId: policy.id },
+      });
+
+      const moves = await tx.movement.aggregate({
+        where: { employeeId, tenureKey, serviceYear: y },
+        _sum: { days: true },
+      });
+
+      const usedForYear = moves._sum.days || 0;
+      buckets.push({ year: y, granted: ent.granted, used: usedForYear, cycleStart: ent.cycleStart });
+
+      periods.push({
+        period: y,
+        serviceYear: y,
+        days: ent.granted,
+        startDate: cycleStart.toISOString().slice(0, 10),
+        endDate: cycleEnd.toISOString().slice(0, 10),
+        granted: ent.granted,
+        used: usedForYear,
+        available: Math.max(0, ent.granted - usedForYear),
+      });
+    }
+
+    // Legacy approvals check
+    const legacy = await tx.leaveRequest.findMany({
+      where: { employeeId, status: 'APROBADA' },
+      select: { id: true, days: true },
+    });
+    for (const r of legacy) {
+      if (!(await tx.movement.count({ where: { requestId: r.id } }))) {
+        throw new ConflictException('Existe aprobación histórica pendiente de reconciliar en el libro de movimientos');
+      }
+    }
+
+    const reserved = policy.reservePending
+      ? (await tx.leaveRequest.aggregate({
+          where: { employeeId, status: 'PENDIENTE', ...(excludeRequest ? { id: { not: excludeRequest } } : {}) },
+          _sum: { days: true },
+        }))._sum.days || 0
+      : 0;
+
+    const grantedTotal = buckets.reduce((n: number, b: any) => n + b.granted, 0);
+    const usedTotal = buckets.reduce((n: number, b: any) => n + b.used, 0);
+    const available = Math.max(0, grantedTotal - usedTotal - reserved);
+
+    return {
+      isEligible: true,
+      eligible: true,
+      availableDays: available,
+      available,
+      reason: null,
+      diasAntiguedad,
+      gestiones,
+      totalDays: grantedTotal,
+      usedDays: usedTotal,
+      reservedDays: reserved,
+      periods,
+      buckets,
+      policy,
+      employeeVersion: e.version,
+      departmentId: e.departmentId,
+      tenureKey,
+    };
+  }
+}
+
