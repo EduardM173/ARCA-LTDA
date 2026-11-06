@@ -1,11 +1,13 @@
-import './Management.css';
+﻿import './Management.css';
 import React,{useEffect,useRef,useState} from 'react';
 import {api,Row} from './api';
 import {Action,Badge,Form,Notice,short,useData} from './components';
 import ContractTemplatesManager from './ContractTemplatesManager';
+import ContractDraftModal from './ContractDraftModal';
 
 type Props={employeeId:string;onEmployeeChange:(id:string)=>void;canAdmin:boolean;canIssue?:boolean;onChanged?:()=>void};
 type Modal={type:string;record?:Row;data?:any};
+type DraftModalState={open:boolean;draft?:Row};
 function Dialog({title,onClose,children}:{title:string;onClose:()=>void;children:React.ReactNode}){
  const ref=useRef<HTMLDialogElement>(null),[discard,setDiscard]=useState(false);
  useEffect(()=>{ref.current?.showModal();return()=>ref.current?.close()},[]);
@@ -15,6 +17,7 @@ function Dialog({title,onClose,children}:{title:string;onClose:()=>void;children
 const actions:Record<string,string>={DRAFT_CREATED:'Borrador creado',DRAFT_UPDATED:'Borrador actualizado',ISSUED:'Documento emitido',ISSUE_RECOVERED:'Emisión recuperada',VOIDED:'Contrato anulado',RECTIFICATION_DRAFT:'Borrador de rectificación',RECTIFICATION_LINKED:'Rectificación vinculada'};
 export default function Contracts({employeeId,onEmployeeChange,canAdmin,canIssue=false,onChanged}:Props){
  const[revision,setRevision]=useState(0),[page,setPage]=useState(1),[filterEmployee,setFilterEmployee]=useState(false),[status,setStatus]=useState(''),[search,setSearch]=useState(''),[employeePage,setEmployeePage]=useState(1),[modal,setModal]=useState<Modal|null>(null),[message,setMessage]=useState('');
+ const[draftModal,setDraftModal]=useState<DraftModalState>({open:false});
  const requestKey=useRef(crypto.randomUUID());
  const refresh=()=>{setRevision(n=>n+1);onChanged?.()};
  const templates=useData('templates',revision),policy=useData('contracts/policy',revision),people=useData(`employees?page=${employeePage}&q=${encodeURIComponent(search)}`,revision);
@@ -29,6 +32,8 @@ export default function Contracts({employeeId,onEmployeeChange,canAdmin,canIssue
    {employeeId&&templateOptions.length>0&&<Form title="Nuevo borrador" fields={[{name:'templateId',label:'Plantilla activa',options:templateOptions},{name:'probationDays',label:'Periodo de prueba (días)',type:'number'}]} submit="Guardar borrador" onSubmit={async v=>{const c=await api('contracts','POST',{employeeId,templateId:v.templateId,probationDays:Number(v.probationDays),requestKey:requestKey.current});requestKey.current=crypto.randomUUID();setMessage('Borrador '+c.id+' guardado. Puedes revisarlo antes de emitir.');refresh();await open('edit',c)}}/>}<Notice {...templates}/>{templates.data&&!templateOptions.length&&<p className="muted">No hay plantilla activa. Un administrador puede crearla en Plantillas versionadas.</p>}
   </section>
   {message&&<p className="success" role="status">{message}</p>}
+  {/* HU-19: Bandeja de borradores con acceso rápido al modal */}
+  <section className="card"><div className="toolbar"><h3>Borradores de contrato (HU-19)</h3><button onClick={()=>setDraftModal({open:true})}>+ Nuevo borrador</button></div><p className="muted">Genera un borrador vinculado a Personal — los datos del funcionario quedan congelados al crearlos.</p></section>
   <section className="card"><div className="toolbar"><h3>Contratos y documentos históricos</h3><button onClick={refresh}>Actualizar</button></div><div className="fields"><label>Estado<select value={status} onChange={e=>{setStatus(e.target.value);setPage(1)}}><option value="">Todos</option>{['BORRADOR','EMITIENDO','ERROR_EMISION','EMITIDO','ANULADO'].map(s=><option key={s}>{s}</option>)}</select></label><label>Funcionario<select value={filterEmployee?'selected':'all'} onChange={e=>{setFilterEmployee(e.target.value==='selected');setPage(1)}}><option value="all">Todos los autorizados</option><option value="selected" disabled={!employeeId}>Solo el seleccionado</option></select></label></div><Notice {...list}/>
    {list.data?.items.length===0&&<p className="empty">No hay contratos con estos filtros.</p>}
    {list.data?.items.map((c:Row)=><article className="record" key={c.id}><div><strong>{c.snapshot.name}</strong><p>{short(c.createdAt)} · {c.probationDays} días de prueba · {c.id}</p>{c.originalId&&<p>Rectifica: {c.originalId}</p>}<Badge value={c.status}/></div><div className="actions"><Action run={()=>open('preview',c)}>Vista previa</Action><Action run={()=>open('history',c)}>Historial</Action>{['BORRADOR','ERROR_EMISION'].includes(c.status)&&<Action run={()=>open('edit',c)}>Editar borrador</Action>}{canIssue&&['BORRADOR','ERROR_EMISION','EMITIENDO'].includes(c.status)&&<Action run={()=>open('issue',c)}>{c.status==='EMITIENDO'?'Recuperar emisión':'Revisar y emitir PDF'}</Action>}{['EMITIDO','ANULADO'].includes(c.status)&&<a className="button" href={`/api/v1/contracts/${c.id}/pdf`}>Descargar PDF ↗</a>}{canAdmin&&canIssue&&c.status==='EMITIDO'&&policy.data?.allowVoid&&<button onClick={()=>setModal({type:'void',record:c})}>Anular</button>}{canAdmin&&canIssue&&['EMITIDO','ANULADO'].includes(c.status)&&policy.data?.allowRectification&&<button onClick={()=>setModal({type:'rectify',record:c})}>Rectificar</button>}</div></article>)}
@@ -46,5 +51,8 @@ export default function Contracts({employeeId,onEmployeeChange,canAdmin,canIssue
    {modal.type==='template'&&<Form inline fields={[{name:'name',label:'Nombre de plantilla',value:modal.record?.name},{name:'body',label:'Texto',type:'textarea',value:modal.record?.body}]} submit="Guardar nueva versión" onSubmit={async v=>{const t=await api('templates','POST',v);setMessage(`Plantilla ${t.name} versión ${t.version} guardada.`);refresh();setModal(null)}}><p className="muted">Variables permitidas: {'{{name}}, {{code}}, {{hiredAt}}, {{salary}}, {{currency}}, {{probationDays}}'}. Texto únicamente.</p></Form>}
    {modal.type==='policy'&&!policy.loading&&!policy.error&&<Form inline fields={[{name:'allowVoid',label:'Anulación de documentos emitidos',options:[{value:'false',label:'No autorizada'},{value:'true',label:'Autorizada con motivo registrado'}],value:String(policy.data?.allowVoid||false)},{name:'allowRectification',label:'Rectificación con nuevo documento vinculado',options:[{value:'false',label:'No autorizada'},{value:'true',label:'Autorizada conservando el original'}],value:String(policy.data?.allowRectification||false)},{name:'rationale',label:'Decisión institucional y autoridad que aprueba',type:'textarea'}]} submit="Confirmar aprobación institucional" onSubmit={async v=>{await api('contracts/policy','POST',{allowVoid:v.allowVoid==='true',allowRectification:v.allowRectification==='true',rationale:v.rationale,approved:true});setMessage('Política documental registrada con responsable y fecha.');refresh();setModal(null)}}><p className="muted">Registrar esta acción requiere autorización institucional. No representa una regla legal automática.</p></Form>}
   </Dialog>}
+  {/* HU-19: ContractDraftModal para crear/editar borradores vinculados a Personal */}
+  {draftModal.open&&<ContractDraftModal draft={draftModal.draft} employeeId={employeeId} onClose={()=>setDraftModal({open:false})} onSaved={()=>{setDraftModal({open:false});refresh()}}/>}
  </div>;
 }
+

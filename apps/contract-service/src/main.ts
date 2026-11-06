@@ -1,4 +1,4 @@
-import {Body,Controller,Get,Post,Put,Patch,Req,Res,Param,Query,ConflictException,BadRequestException,HttpException,ForbiddenException,NotFoundException} from '@nestjs/common';
+import {Body,Controller,Get,Post,Put,Patch,Delete,Req,Res,Param,Query,ConflictException,BadRequestException,HttpException,ForbiddenException,NotFoundException} from '@nestjs/common';
 import {PrismaClient,Prisma} from '../generated/client';
 import {start,authorize,call,requirePermission} from '../../../packages/platform/src/http';
 import {generatePdf,readPdf} from '../../../packages/platform/src/documents';
@@ -9,6 +9,11 @@ import {
   updateTemplateSchema,
   renderContractTemplate,
 } from './templates.service';
+import {
+  ContractDraftsService,
+  createDraftSchema,
+  updateDraftSchema,
+} from './contracts-draft.service';
 
 const db=new PrismaClient({transactionOptions:{maxWait:15000,timeout:30000}});
 const allowed=['name','code','hiredAt','salary','currency','probationDays'];
@@ -65,6 +70,7 @@ async function employeeSnapshot(employeeId:string,actor:any){const e=await call(
 @Controller()
 class ContractController{
  private readonly templatesService = new ContractTemplatesService(db);
+ private readonly draftsService    = new ContractDraftsService(db);
  @Get('health')async health(){await db.$queryRaw`SELECT 1`;return {status:'ok'}}
 
  /**
@@ -95,6 +101,45 @@ class ContractController{
   const actor = await authorize(req, 'contract', ['ADMIN', 'HR']);
   const input = updateTemplateSchema.parse(body);
   return this.templatesService.updateTemplate(uuid.parse(id), input, actor.id, requestId(req));
+ }
+
+ /**
+  * HU-19 (ARCA-20) §1 — Crear borrador consultando datos actuales del funcionario
+  * en personnel-service y congelando el snapshot.
+  */
+ @Post('contracts/drafts')
+ async createDraft(@Req()req:any,@Body()body:unknown){
+  const actor=await authorize(req,'contract',['ADMIN','HR']);
+  const input=createDraftSchema.parse(body);
+  const employee=await employeeSnapshot(input.employeeId,actor);
+  return this.draftsService.createDraft(input,employee,actor.id,requestId(req));
+ }
+
+ /**
+  * HU-19 (ARCA-20) §2 — Vista previa fidedigna del borrador (texto resuelto exacto).
+  * No modifica estado ni emite el documento.
+  */
+ @Get('contracts/drafts/:id/preview')
+ async previewDraft(@Req()req:any,@Param('id')id:string){
+  const actor=await authorize(req,'contract',['ADMIN','HR']);
+  const c=await db.contract.findUniqueOrThrow({where:{id:uuid.parse(id)}});
+  assertScope(actor,c.snapshot);
+  return this.draftsService.previewDraft(uuid.parse(id));
+ }
+
+ /**
+  * HU-19 (ARCA-20) §3 — Editar borrador: cambia plantilla / días de prueba e incrementa versión.
+  * Rechaza HTTP 409 si el contrato ya fue EMITIDO.
+  */
+ @Put('contracts/drafts/:id')
+ async updateDraft(@Req()req:any,@Param('id')id:string,@Body()body:unknown){
+  const actor=await authorize(req,'contract',['ADMIN','HR']);
+  const input=updateDraftSchema.parse(body);
+  uuid.parse(id);
+  const c=await db.contract.findUniqueOrThrow({where:{id}});
+  assertScope(actor,c.snapshot);
+  const freshSnapshot=input.refreshSnapshot?await employeeSnapshot(c.employeeId,actor):null;
+  return this.draftsService.updateDraft(id,input,freshSnapshot,actor.id,requestId(req));
  }
 
  @Get('templates')async templates(@Req()req:any){await authorize(req,'contract',['ADMIN','HR']);return db.template.findMany({orderBy:[{name:'asc'},{version:'desc'}]})}
