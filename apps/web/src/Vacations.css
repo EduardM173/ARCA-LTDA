@@ -22,3 +22,11 @@
 
 .eligibility-periods{margin-top:16px;border-top:1px solid #edf0e9;padding-top:14px}
 .eligibility-periods table{margin-top:10px;width:100%}
+
+/* HU-16: Registro de solicitud de vacaciones */
+.vacation-request-dialog{max-width:620px}
+.vacation-request-balance{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}
+.vacation-request-balance p{border:1px solid #dce7df;border-radius:10px;padding:12px;margin:0;font-size:12px;color:#556b62}
+.vacation-request-balance strong{display:block;margin-top:6px;font-size:1.25rem;color:#194e40}
+.vacation-request-warning{background:#fff5f5;border-left:3px solid #d9534f;border-radius:0 6px 6px 0;padding:12px 16px;color:#a64439;font-size:13px;margin:12px 0}
+@media(max-width:640px){.vacation-request-balance{grid-template-columns:1fr}}

@@ -1,7 +1,15 @@
-import { Injectable, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, ConflictException, BadRequestException, UnprocessableEntityException } from '@nestjs/common';
 import { PrismaClient } from '../generated/client';
 import { call, date, Actor, assertDepartment, businessToday } from '../../../packages/platform/src/http';
 import { VacationEligibilityResponseDto, VacationPeriodDto } from './dto/vacation-eligibility-response.dto';
+import {
+  CreateVacationRequestInput,
+  LeaveRequestResponseDto,
+  INSUFFICIENT_VACATION_BALANCE,
+  OVERLAPPING_VACATION_REQUEST,
+  toLeaveRequestResponse,
+} from './dto/leave-request-response.dto';
+import { countDays } from './calendar';
 import { z } from 'zod';
 
 const uuid = z.uuid();
@@ -210,6 +218,84 @@ export class VacationsService {
       departmentId: e.departmentId,
       tenureKey,
     };
+  }
+
+  /**
+   * HU-16 (ARCA-16): Registrar una solicitud de vacaciones.
+   * Validaciones:
+   * A. Saldo insuficiente -> HTTP 422 con mensaje institucional.
+   * B. Solapamiento con solicitud PENDIENTE/APROBADA -> HTTP 422.
+   * C. Rango de fechas válido y con días laborables computables.
+   */
+  async createRequest(
+    input: CreateVacationRequestInput,
+    actor?: Actor,
+    txClient?: any
+  ): Promise<LeaveRequestResponseDto> {
+    const tx = txClient || this.prisma;
+    const { employeeId, startDate, endDate } = input;
+
+    if (!z.iso.date().safeParse(startDate).success || !z.iso.date().safeParse(endDate).success) {
+      throw new BadRequestException('Rango de fechas inválido');
+    }
+    if (startDate > endDate) {
+      throw new BadRequestException('Rango de fechas inválido');
+    }
+    if (startDate < businessToday()) {
+      throw new BadRequestException('Rango de fechas inválido');
+    }
+    if (date(endDate).getTime() - date(startDate).getTime() > 366 * 86400000) {
+      throw new BadRequestException('Rango de fechas inválido');
+    }
+
+    const eligibility = await this.checkEligibility(employeeId, actor, tx);
+    if (!eligibility.eligible) {
+      throw new BadRequestException(eligibility.reason || 'El funcionario no es elegible para solicitar vacaciones');
+    }
+
+    const policy = eligibility.policy;
+    if (!policy) {
+      throw new ConflictException('Requiere configurar y aprobar la política de vacaciones');
+    }
+
+    const daysRequested = countDays(startDate, endDate, policy.counting, policy.holidays || [], policy.weekdays);
+    if (daysRequested < 1) {
+      throw new BadRequestException('El rango de fechas no contiene días laborables válidos');
+    }
+
+    const availableDays = eligibility.availableDays ?? eligibility.available ?? 0;
+    if (daysRequested > availableDays) {
+      throw new UnprocessableEntityException(INSUFFICIENT_VACATION_BALANCE);
+    }
+
+    const overlapping = await tx.leaveRequest.count({
+      where: {
+        employeeId,
+        status: { in: ['PENDIENTE', 'APROBADA'] },
+        startsAt: { lte: date(endDate) },
+        endsAt: { gte: date(startDate) },
+      },
+    });
+    if (overlapping > 0) {
+      throw new UnprocessableEntityException(OVERLAPPING_VACATION_REQUEST);
+    }
+
+    const created = await tx.leaveRequest.create({
+      data: {
+        employeeId,
+        departmentId: eligibility.departmentId,
+        tenureKey: eligibility.tenureKey || 'legacy',
+        requestKey: input.requestKey,
+        startsAt: date(startDate),
+        endsAt: date(endDate),
+        days: daysRequested,
+        reason: input.reason,
+        createdBy: actor?.id || input.createdBy || 'system',
+        policyId: policy.id,
+      },
+    });
+
+    return toLeaveRequestResponse(created, { startDate, endDate, daysRequested });
   }
 }
 

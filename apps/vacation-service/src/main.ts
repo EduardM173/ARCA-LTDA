@@ -2,8 +2,8 @@ import { Controller, Get, Post, Req, Body, Param, Query, ConflictException, BadR
 import { PrismaClient } from '../generated/client';
 import { start, authorize, call, date, Actor, identity, assertDepartment, departmentWhere, requirePermission, businessToday, currentRequestId } from '../../../packages/platform/src/http';
 import { z } from 'zod';
-import { countDays } from './calendar';
 import { VacationsService, anniversary, completedYears } from './vacations.service';
+import { toLeaveRequestResponse } from './dto/leave-request-response.dto';
 
 export { anniversary, completedYears };
 
@@ -118,24 +118,30 @@ export class VacationController {
   @Post('vacations/requests')
   async create(@Req() req: any, @Body() body: unknown) {
     const a = await authorize(req, 'vacation', ['ADMIN', 'HR']);
-    const i = z.object({ employeeId: uuid, start: day, end: day, requestKey: z.uuid().optional() }).strict().parse(body);
+    const i = z.object({
+      employeeId: uuid,
+      start: day.optional(),
+      end: day.optional(),
+      startDate: day.optional(),
+      endDate: day.optional(),
+      daysRequested: z.coerce.number().int().positive().optional(),
+      reason: z.string().trim().max(500).nullable().optional(),
+      requestKey: z.uuid().optional(),
+    }).strict().parse(body);
+    const start = i.startDate ?? i.start;
+    const end = i.endDate ?? i.end;
+    if (!start || !end) throw new BadRequestException('Debe indicar la fecha de inicio y fin');
     assertDepartment(a, (await data(i.employeeId)).departmentId);
-    if (i.start > i.end || i.start < businessToday() || date(i.end).getTime() - date(i.start).getTime() > 366 * 86400000) throw new BadRequestException('Fechas inválidas');
     return db.$transaction(async tx => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${i.employeeId}))`;
       if (i.requestKey) {
         const old = await tx.leaveRequest.findUnique({ where: { requestKey: i.requestKey } });
         if (old) {
-          if (old.createdBy !== a.id || old.employeeId !== i.employeeId || old.startsAt.toISOString().slice(0, 10) !== i.start || old.endsAt.toISOString().slice(0, 10) !== i.end) throw new ConflictException('La clave ya corresponde a otra solicitud');
-          return old;
+          if (old.createdBy !== a.id || old.employeeId !== i.employeeId || old.startsAt.toISOString().slice(0, 10) !== start || old.endsAt.toISOString().slice(0, 10) !== end) throw new ConflictException('La clave ya corresponde a otra solicitud');
+          return toLeaveRequestResponse(old);
         }
       }
-      const b = await this.vacationsService.checkEligibility(i.employeeId, a, tx);
-      if (!b.eligible) throw new BadRequestException(b.reason!);
-      const days = countDays(i.start, i.end, b.policy.counting, b.policy.holidays, b.policy.weekdays);
-      if (days < 1 || days > b.available) throw new BadRequestException('Saldo insuficiente o rango sin días computables');
-      if (await tx.leaveRequest.count({ where: { employeeId: i.employeeId, status: { in: ['PENDIENTE', 'APROBADA'] }, startsAt: { lte: date(i.end) }, endsAt: { gte: date(i.start) } } })) throw new ConflictException('Hay una solicitud solapada');
-      const r = await tx.leaveRequest.create({ data: { employeeId: i.employeeId, departmentId: b.departmentId, tenureKey: b.tenureKey!, requestKey: i.requestKey, startsAt: date(i.start), endsAt: date(i.end), days, createdBy: a.id, policyId: b.policy.id } });
+      const r = await this.vacationsService.createRequest({ employeeId: i.employeeId, startDate: start, endDate: end, reason: i.reason, requestKey: i.requestKey }, a, tx);
       await tx.outbox.create({ data: { requestId: r.id, event: 'PENDIENTE' } });
       await audit(tx, a.id, 'REQUEST_CREATED', r.id, r.employeeId);
       return r;
