@@ -2,6 +2,7 @@ import {Controller,Get,Post,Patch,Req,Res,Body,Param,Query,HttpException,Conflic
 import {PrismaClient,Prisma} from '../generated/client';
 import {start,authorize,call,date,assertDepartment,requirePermission} from '../../../packages/platform/src/http';
 import {generatePdf,readPdf} from '../../../packages/platform/src/documents';import {z} from 'zod';
+import { PaymentsService } from './payments.service';
 const db=new PrismaClient({transactionOptions:{maxWait:15000,timeout:30000}});
 const money=z.string().regex(/^\d{1,12}(\.\d{1,2})?$/),period=z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
 const lineInput=z.object({conceptId:z.uuid().optional(),concept:z.string().trim().min(2).max(100).optional(),type:z.enum(['ABONO','DESCUENTO']).optional(),amount:money}).strict().refine(l=>l.conceptId||l.concept,'Seleccione un concepto');
@@ -15,6 +16,7 @@ async function snapshot(employeeId:string,p:string,actor:any){const e=await call
 function scopedWhere(actor:any){return actor.scopeAll?{}:{OR:(actor.departmentIds||[]).map((id:string)=>({snapshot:{path:['departmentId'],equals:id}}))}}
 @Controller()
 export class PaymentController{
+ private readonly paymentsService = new PaymentsService(db);
  @Get('health')async health(){await db.$queryRaw`SELECT 1`;return {status:'ok'}}
  @Get('payments/summary')async summary(@Req()req:any,@Query('period')filter?:string){const a=await authorize(req,'payment',['FINANCE','BOARD']);const where:any={...scopedWhere(a),...(filter?{period:period.parse(filter)}:{})};const groups=await db.payment.groupBy({by:['status'],where,_count:{_all:true}});return {period:filter||null,total:groups.reduce((n,g)=>n+g._count._all,0),byStatus:Object.fromEntries(groups.map(g=>[g.status,g._count._all]))}}
  @Get('payments/concepts')async concepts(@Req()req:any){await authorize(req,'payment',['FINANCE']);return db.concept.findMany({orderBy:{name:'asc'}})}

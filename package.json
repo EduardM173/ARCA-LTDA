@@ -21,7 +21,8 @@
     "test:hu17": "node --import tsx tests/hu17-vacation-decision.spec.ts",
     "test:hu18": "node --import tsx tests/hu18-contract-templates.spec.ts",
     "test:hu19": "node --import tsx tests/hu19-contract-drafts.spec.ts",
-    "test:hu20": "node --import tsx tests/hu20-contract-issue.spec.ts"
+    "test:hu20": "node --import tsx tests/hu20-contract-issue.spec.ts",
+    "test:hu21": "node --import tsx tests/hu21-payment-drafts.spec.ts"
   },
   "dependencies": {
     "@nestjs/common": "11.2.8",
