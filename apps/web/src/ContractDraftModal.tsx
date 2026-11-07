@@ -13,12 +13,13 @@ interface Props {
   draft?:    Row;
   /** Empleado preseleccionado (opcional) */
   employeeId?: string;
+  canIssue?:   boolean;
   onClose:   ()=>void;
   onSaved:   ()=>void;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
-export default function ContractDraftModal({draft,employeeId:initEmpId='',onClose,onSaved}:Props){
+export default function ContractDraftModal({draft,employeeId:initEmpId='',canIssue=false,onClose,onSaved}:Props){
   const ref=useRef<HTMLDialogElement>(null);
 
   // Form state
@@ -34,6 +35,7 @@ export default function ContractDraftModal({draft,employeeId:initEmpId='',onClos
   const [previewMeta,setPreviewMeta]=useState<{templateName:string;templateVersion:number}|null>(null);
   const [previewOpen,setPreviewOpen]=useState(false);
   const [saving,setSaving]=useState(false);
+  const [issuing,setIssuing]=useState(false);
   const [error,setError]=useState('');
   const [success,setSuccess]=useState('');
 
@@ -102,6 +104,22 @@ export default function ContractDraftModal({draft,employeeId:initEmpId='',onClos
         setError(msg);
       }
     }finally{setSaving(false)}
+  }
+
+  async function issueAndDownload(){
+    if(!draft)return;
+    setIssuing(true);
+    setError('');
+    try{
+      await api(`contracts/${draft.id}/issue`,'POST',{});
+      setSuccess('Contrato emitido exitosamente con PDF inmutable (T09). Abriendo descarga...');
+      window.open(`/api/v1/contracts/${draft.id}/pdf`,'_blank');
+      setTimeout(()=>{onSaved();onClose();},1200);
+    }catch(e:any){
+      setError(e.message||'Error al emitir el contrato');
+    }finally{
+      setIssuing(false);
+    }
   }
 
   const isEditing=!!draft;
@@ -188,6 +206,12 @@ export default function ContractDraftModal({draft,employeeId:initEmpId='',onClos
 
         {isEditing&&(
           <Action run={loadPreview}>Vista previa</Action>
+        )}
+        {isEditing&&canIssue&&(
+          <button type="button" onClick={issueAndDownload} disabled={issuing||saving}
+            style={{padding:'8px 18px',background:'#163d38',color:'#fff',border:'none',borderRadius:6,fontWeight:600,cursor:issuing?'not-allowed':'pointer'}}>
+            {issuing ? 'Emitiendo PDF…' : 'Emitir contrato (PDF) ↗'}
+          </button>
         )}
 
         <button type="button" onClick={onClose}

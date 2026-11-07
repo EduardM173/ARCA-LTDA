@@ -14,6 +14,7 @@ import {
   createDraftSchema,
   updateDraftSchema,
 } from './contracts-draft.service';
+import { ContractIssueService } from './contracts-issue.service';
 
 const db=new PrismaClient({transactionOptions:{maxWait:15000,timeout:30000}});
 const allowed=['name','code','hiredAt','salary','currency','probationDays'];
@@ -71,6 +72,7 @@ async function employeeSnapshot(employeeId:string,actor:any){const e=await call(
 class ContractController{
  private readonly templatesService = new ContractTemplatesService(db);
  private readonly draftsService    = new ContractDraftsService(db);
+ private readonly issueService     = new ContractIssueService(db);
  @Get('health')async health(){await db.$queryRaw`SELECT 1`;return {status:'ok'}}
 
  /**

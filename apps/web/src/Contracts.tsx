@@ -1,4 +1,4 @@
-﻿import './Management.css';
+import './Management.css';
 import React,{useEffect,useRef,useState} from 'react';
 import {api,Row} from './api';
 import {Action,Badge,Form,Notice,short,useData} from './components';
@@ -52,7 +52,7 @@ export default function Contracts({employeeId,onEmployeeChange,canAdmin,canIssue
    {modal.type==='policy'&&!policy.loading&&!policy.error&&<Form inline fields={[{name:'allowVoid',label:'Anulación de documentos emitidos',options:[{value:'false',label:'No autorizada'},{value:'true',label:'Autorizada con motivo registrado'}],value:String(policy.data?.allowVoid||false)},{name:'allowRectification',label:'Rectificación con nuevo documento vinculado',options:[{value:'false',label:'No autorizada'},{value:'true',label:'Autorizada conservando el original'}],value:String(policy.data?.allowRectification||false)},{name:'rationale',label:'Decisión institucional y autoridad que aprueba',type:'textarea'}]} submit="Confirmar aprobación institucional" onSubmit={async v=>{await api('contracts/policy','POST',{allowVoid:v.allowVoid==='true',allowRectification:v.allowRectification==='true',rationale:v.rationale,approved:true});setMessage('Política documental registrada con responsable y fecha.');refresh();setModal(null)}}><p className="muted">Registrar esta acción requiere autorización institucional. No representa una regla legal automática.</p></Form>}
   </Dialog>}
   {/* HU-19: ContractDraftModal para crear/editar borradores vinculados a Personal */}
-  {draftModal.open&&<ContractDraftModal draft={draftModal.draft} employeeId={employeeId} onClose={()=>setDraftModal({open:false})} onSaved={()=>{setDraftModal({open:false});refresh()}}/>}
+  {draftModal.open&&<ContractDraftModal draft={draftModal.draft} employeeId={employeeId} canIssue={canIssue} onClose={()=>setDraftModal({open:false})} onSaved={()=>{setDraftModal({open:false});refresh()}}/>}
  </div>;
 }
 
