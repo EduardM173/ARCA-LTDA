@@ -31,6 +31,24 @@ export function completedYears(hired: string, today: Date): number {
   return today.getUTCFullYear() - h.getUTCFullYear() - ((today.getUTCMonth() < h.getUTCMonth() || (today.getUTCMonth() === h.getUTCMonth() && today.getUTCDate() < h.getUTCDate())) ? 1 : 0);
 }
 
+/**
+ * Determina los días de vacación anual otorgados según la escala de antigüedad laboral:
+ * - De 1 a 4 años cumplidos: 15 días laborables por año.
+ * - De 5 a 9 años cumplidos: 20 días laborables por año.
+ * - De 10 o más años cumplidos: 30 días laborables por año.
+ * (Conforme a la escala legal del Art. 33 de la Ley General del Trabajo y requerimiento docente).
+ */
+export function getVacationDaysByTenure(serviceYear: number): number {
+  if (serviceYear >= 10) {
+    return 30;
+  }
+  if (serviceYear >= 5) {
+    return 20;
+  }
+  return 15;
+}
+
+
 @Injectable()
 export class VacationsService {
   constructor(private readonly prisma: PrismaClient) {}
@@ -155,10 +173,12 @@ export class VacationsService {
       const cycleStart = anniversary(hire, y, leapDay);
       const cycleEnd = anniversary(hire, y + 1, leapDay);
 
+      const daysForYear = getVacationDaysByTenure(y);
+
       const ent = await tx.entitlement.upsert({
         where: { employeeId_tenureKey_serviceYear: { employeeId, tenureKey, serviceYear: y } },
-        update: {},
-        create: { employeeId, tenureKey, serviceYear: y, cycleStart, policyId: policy.id },
+        update: { granted: daysForYear },
+        create: { employeeId, tenureKey, serviceYear: y, cycleStart, policyId: policy.id, granted: daysForYear },
       });
 
       const moves = await tx.movement.aggregate({

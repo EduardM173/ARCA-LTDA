@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { VacationsService } from '../apps/vacation-service/src/vacations.service';
+import { VacationsService, getVacationDaysByTenure } from '../apps/vacation-service/src/vacations.service';
 import { businessToday, date } from '../packages/platform/src/http';
 
 function createMockService(employeeData: any, policyData: any = { id: 'pol-1', counting: 'CALENDAR', carryover: true, leapDay: 'FEB28', reservePending: false }) {
@@ -8,7 +8,7 @@ function createMockService(employeeData: any, policyData: any = { id: 'pol-1', c
       findFirst: async () => policyData,
     },
     entitlement: {
-      upsert: async ({ create }: any) => ({ ...create, granted: 15 }),
+      upsert: async ({ create }: any) => ({ ...create, granted: create.granted ?? 15 }),
     },
     movement: {
       aggregate: async () => ({ _sum: { days: 0 } }),
@@ -28,6 +28,17 @@ function createMockService(employeeData: any, policyData: any = { id: 'pol-1', c
 
 async function runTests() {
   console.log('--- Running HU-15 Vacation Eligibility Unit Tests ---');
+
+  // Test Case: Verificación de función de escala por antigüedad (getVacationDaysByTenure)
+  {
+    assert.equal(getVacationDaysByTenure(1), 15, 'Año 1 debe otorgar 15 días');
+    assert.equal(getVacationDaysByTenure(4), 15, 'Año 4 debe otorgar 15 días');
+    assert.equal(getVacationDaysByTenure(5), 20, 'Año 5 debe otorgar 20 días');
+    assert.equal(getVacationDaysByTenure(9), 20, 'Año 9 debe otorgar 20 días');
+    assert.equal(getVacationDaysByTenure(10), 30, 'Año 10 debe otorgar 30 días');
+    assert.equal(getVacationDaysByTenure(15), 30, 'Año 15 debe otorgar 30 días');
+    console.log('PASS: Escala progresiva por antigüedad verificada (1-4 años: 15d, 5-9 años: 20d, 10+ años: 30d).');
+  }
 
   // Test Case T05: Sin ratificación no genera derecho vacacional
   {
@@ -97,6 +108,7 @@ async function runTests() {
     assert.equal(res.periods.length, 1, 'T07: periods must contain 1 gestión');
     assert.equal(res.periods[0].period, 1);
     assert.equal(res.periods[0].days, 15);
+    assert.equal(res.periods[0].granted, 15);
     console.log('PASS: T07 - Funcionario ratificado con 1 gestión completa genera 15 días.');
   }
 
@@ -122,6 +134,57 @@ async function runTests() {
     assert.equal(res.periods[1].period, 2);
     assert.equal(res.periods[1].days, 15);
     console.log('PASS: Funcionario con 2 gestiones completadas acumula 30 días con desglose de 2 periodos.');
+  }
+
+  // Test Case: Funcionario ratificado con 5 gestiones (años 1-4 a 15d = 60d + año 5 a 20d = 80d)
+  {
+    const today = businessToday();
+    const hireDate = new Date(date(today).getTime() - 1850 * 86400000).toISOString().slice(0, 10);
+    const service = createMockService({
+      id: 'emp-005-years',
+      departmentId: 'dep-001',
+      status: 'ACTIVO',
+      hiredAt: hireDate,
+      ratifiedAt: hireDate,
+      version: 1,
+    });
+
+    const res = await service.checkEligibility('emp-005-years');
+    assert.equal(res.isEligible, true);
+    assert.equal(res.gestiones, 5);
+    assert.equal(res.periods.length, 5);
+    // Periodos 1 a 4: 15 días cada uno
+    for (let i = 0; i < 4; i++) {
+      assert.equal(res.periods[i].granted, 15, `Periodo ${i + 1} debe tener 15 días`);
+    }
+    // Periodo 5: 20 días
+    assert.equal(res.periods[4].granted, 20, 'Periodo 5 debe tener 20 días');
+    assert.equal(res.availableDays, 80, 'Total acumulado 5 gestiones: 15*4 + 20 = 80 días');
+    console.log('PASS: Funcionario con 5 años de antigüedad escala a 20 días en gestión 5 (80 días acumulados).');
+  }
+
+  // Test Case: Funcionario ratificado con 10 gestiones (años 1-4: 15d=60d; años 5-9: 20d=100d; año 10: 30d -> total 190d)
+  {
+    const today = businessToday();
+    const hireDate = new Date(date(today).getTime() - 3700 * 86400000).toISOString().slice(0, 10);
+    const service = createMockService({
+      id: 'emp-010-years',
+      departmentId: 'dep-001',
+      status: 'ACTIVO',
+      hiredAt: hireDate,
+      ratifiedAt: hireDate,
+      version: 1,
+    });
+
+    const res = await service.checkEligibility('emp-010-years');
+    assert.equal(res.isEligible, true);
+    assert.equal(res.gestiones, 10);
+    assert.equal(res.periods.length, 10);
+    assert.equal(res.periods[4].granted, 20, 'Periodo 5 debe tener 20 días');
+    assert.equal(res.periods[8].granted, 20, 'Periodo 9 debe tener 20 días');
+    assert.equal(res.periods[9].granted, 30, 'Periodo 10 debe tener 30 días');
+    assert.equal(res.availableDays, 190, 'Total acumulado 10 gestiones: 60 + 100 + 30 = 190 días');
+    console.log('PASS: Funcionario con 10 años de antigüedad escala a 30 días en gestión 10 (190 días acumulados).');
   }
 
   // Test Case: Funcionario en estado BAJA
