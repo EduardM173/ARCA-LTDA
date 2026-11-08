@@ -24,7 +24,7 @@ const email=i=>`demo${String(i+1).padStart(2,'0')}@demo.arca.test`;
 const code=i=>`DEMO-ARCA-${String(i+1).padStart(3,'0')}`;
 const permissions=roles=>[...(roles.includes('ADMIN')?['users.manage','salary.read','salary.write','employee.ratify','contracts.issue']:[]),...(roles.includes('FINANCE')?['payments.issue','payments.record']:[]),...(roles.includes('APPROVER')?['vacations.approve']:[])];
 const names=['Quispe','Mamani','Choque','Condori','Huanca','Poma','Flores','Vargas','Rojas','Arce','Torres','Rivero'];
-function protectCredentials(){if(process.platform!=='win32')return;const account=`${process.env.USERDOMAIN}\\${process.env.USERNAME}`;const result=spawnSync('icacls',[file,'/inheritance:r','/grant:r',`${account}:(F)`,'NT AUTHORITY\\SYSTEM:(F)','BUILTIN\\Administrators:(F)'],{encoding:'utf8'});if(result.status!==0)throw Error('No se pudo restringir el acceso local al archivo de credenciales')}
+function protectCredentials(){if(process.platform!=='win32')return;const account=`${process.env.USERDOMAIN}\\${process.env.USERNAME}`;const result=spawnSync('icacls',[file,'/inheritance:r','/grant:r',`${account}:(F)`,'*S-1-5-18:(F)','*S-1-5-32-544:(F)'],{encoding:'utf8'});if(result.status!==0)throw Error('No se pudo restringir el acceso local al archivo de credenciales')}
 async function run(){safe();
  const existing=await readFile(file,'utf8').catch(()=>null);
  if(action==='seed'){

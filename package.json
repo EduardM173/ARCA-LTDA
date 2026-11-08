@@ -13,7 +13,7 @@
     "build": "node scripts/build.mjs",
     "dev": "node scripts/dev.mjs",
     "bootstrap": "node --env-file=.env scripts/local-bootstrap.mjs",
-    "demo:seed": "node --env-file=.env scripts/demo-local.mjs seed && node --env-file=.env scripts/demo-flows.mjs seed && node --env-file=.env scripts/demo-history.mjs && node scripts/demo-refresh-drafts.mjs",
+    "demo:seed": "node --env-file=.env scripts/demo-local.mjs seed && node --env-file=.env scripts/demo-flows.mjs seed && node --env-file=.env scripts/demo-history.mjs && node --env-file=.env scripts/demo-refresh-drafts.mjs",
     "demo:verify": "node --env-file=.env scripts/demo-local.mjs verify && node --env-file=.env scripts/demo-flows.mjs verify",
     "demo:reset": "node --env-file=.env scripts/demo-reset.mjs",
     "test": "node --env-file=.env tests/integration.mjs",
