@@ -1,8 +1,20 @@
-import {Body,Controller,Get,Post,Patch,Req,Res,Param,Query,ConflictException,BadRequestException,HttpException,ForbiddenException} from '@nestjs/common';
+import {Body,Controller,Get,Post,Put,Patch,Delete,Req,Res,Param,Query,ConflictException,BadRequestException,HttpException,ForbiddenException,NotFoundException} from '@nestjs/common';
 import {PrismaClient,Prisma} from '../generated/client';
 import {start,authorize,call,requirePermission} from '../../../packages/platform/src/http';
 import {generatePdf,readPdf} from '../../../packages/platform/src/documents';
 import {z} from 'zod';
+import {
+  ContractTemplatesService,
+  createTemplateSchema,
+  updateTemplateSchema,
+  renderContractTemplate,
+} from './templates.service';
+import {
+  ContractDraftsService,
+  createDraftSchema,
+  updateDraftSchema,
+} from './contracts-draft.service';
+import { ContractIssueService } from './contracts-issue.service';
 
 const db=new PrismaClient({transactionOptions:{maxWait:15000,timeout:30000}});
 const allowed=['name','code','hiredAt','salary','currency','probationDays'];
@@ -13,6 +25,39 @@ export function render(body:string,values:Record<string,unknown>){
  const result=body.replace(/{{\s*(\w+)\s*}}/g,(_,key)=>{if(!allowed.includes(key)||values[key]===undefined)throw new BadRequestException('Variable no permitida: '+key);return key==='hiredAt'?String(values[key]).slice(0,10):String(values[key])});
  if(result.includes('{{')||result.includes('}}'))throw new BadRequestException('Marcador de plantilla incompleto');
  return result;
+}
+
+async function resolveTemplate(client: any, templateId: string) {
+  const ct = await client.contractTemplate.findUnique({ where: { id: templateId } });
+  if (ct) {
+    return {
+      id: ct.id,
+      name: ct.title,
+      version: ct.version,
+      body: ct.body,
+      active: ct.status === 'ACTIVE',
+      isModern: true,
+    };
+  }
+  const t = await client.template.findUnique({ where: { id: templateId } });
+  if (t) {
+    return {
+      id: t.id,
+      name: t.name,
+      version: t.version,
+      body: t.body,
+      active: t.active,
+      isModern: false,
+    };
+  }
+  throw new NotFoundException('Plantilla no encontrada');
+}
+
+function renderAnyTemplate(t: { body: string; isModern?: boolean }, snapshot: any, probationDays: number) {
+  if (t.isModern) {
+    return renderContractTemplate(t.body, snapshot, probationDays);
+  }
+  return render(t.body, { ...snapshot, probationDays });
 }
 function assertScope(actor:any,snapshot:any){if(actor.scopeAll===true)return;if(snapshot?.departmentId&&actor.departmentIds?.includes(snapshot.departmentId))return;throw new ForbiddenException('No tiene acceso al área de este documento')}
 function scopeFilter(actor:any):Prisma.ContractWhereInput{return actor.scopeAll===true?{}:{OR:(actor.departmentIds||[]).map((id:string)=>({snapshot:{path:['departmentId'],equals:id}}))}}
@@ -25,7 +70,80 @@ async function employeeSnapshot(employeeId:string,actor:any){const e=await call(
 
 @Controller()
 class ContractController{
+ private readonly templatesService = new ContractTemplatesService(db);
+ private readonly draftsService    = new ContractDraftsService(db);
+ private readonly issueService     = new ContractIssueService(db);
  @Get('health')async health(){await db.$queryRaw`SELECT 1`;return {status:'ok'}}
+
+ /**
+  * HU-18 (ARCA-19): Endpoints REST para plantillas de contrato parametrizables
+  * con control de versiones y RBAC (ADMIN, HR).
+  */
+ @Get('contracts/templates')
+ async listContractTemplates(@Req() req: any, @Query('status') status?: 'ACTIVE' | 'ARCHIVED') {
+  await authorize(req, 'contract', ['ADMIN', 'HR']);
+  return this.templatesService.listTemplates(status);
+ }
+
+ @Get('contracts/templates/:id')
+ async getContractTemplate(@Req() req: any, @Param('id') id: string) {
+  await authorize(req, 'contract', ['ADMIN', 'HR']);
+  return this.templatesService.getTemplateById(uuid.parse(id));
+ }
+
+ @Post('contracts/templates')
+ async createContractTemplate(@Req() req: any, @Body() body: unknown) {
+  const actor = await authorize(req, 'contract', ['ADMIN', 'HR']);
+  const input = createTemplateSchema.parse(body);
+  return this.templatesService.createTemplate(input, actor.id, requestId(req));
+ }
+
+ @Put('contracts/templates/:id')
+ async updateContractTemplate(@Req() req: any, @Param('id') id: string, @Body() body: unknown) {
+  const actor = await authorize(req, 'contract', ['ADMIN', 'HR']);
+  const input = updateTemplateSchema.parse(body);
+  return this.templatesService.updateTemplate(uuid.parse(id), input, actor.id, requestId(req));
+ }
+
+ /**
+  * HU-19 (ARCA-20) §1 — Crear borrador consultando datos actuales del funcionario
+  * en personnel-service y congelando el snapshot.
+  */
+ @Post('contracts/drafts')
+ async createDraft(@Req()req:any,@Body()body:unknown){
+  const actor=await authorize(req,'contract',['ADMIN','HR']);
+  const input=createDraftSchema.parse(body);
+  const employee=await employeeSnapshot(input.employeeId,actor);
+  return this.draftsService.createDraft(input,employee,actor.id,requestId(req));
+ }
+
+ /**
+  * HU-19 (ARCA-20) §2 — Vista previa fidedigna del borrador (texto resuelto exacto).
+  * No modifica estado ni emite el documento.
+  */
+ @Get('contracts/drafts/:id/preview')
+ async previewDraft(@Req()req:any,@Param('id')id:string){
+  const actor=await authorize(req,'contract',['ADMIN','HR']);
+  const c=await db.contract.findUniqueOrThrow({where:{id:uuid.parse(id)}});
+  assertScope(actor,c.snapshot);
+  return this.draftsService.previewDraft(uuid.parse(id));
+ }
+
+ /**
+  * HU-19 (ARCA-20) §3 — Editar borrador: cambia plantilla / días de prueba e incrementa versión.
+  * Rechaza HTTP 409 si el contrato ya fue EMITIDO.
+  */
+ @Put('contracts/drafts/:id')
+ async updateDraft(@Req()req:any,@Param('id')id:string,@Body()body:unknown){
+  const actor=await authorize(req,'contract',['ADMIN','HR']);
+  const input=updateDraftSchema.parse(body);
+  uuid.parse(id);
+  const c=await db.contract.findUniqueOrThrow({where:{id}});
+  assertScope(actor,c.snapshot);
+  const freshSnapshot=input.refreshSnapshot?await employeeSnapshot(c.employeeId,actor):null;
+  return this.draftsService.updateDraft(id,input,freshSnapshot,actor.id,requestId(req));
+ }
+
  @Get('templates')async templates(@Req()req:any){await authorize(req,'contract',['ADMIN','HR']);return db.template.findMany({orderBy:[{name:'asc'},{version:'desc'}]})}
  @Post('templates')async template(@Req()req:any,@Body()body:unknown){
   const actor=await authorize(req,'contract',['ADMIN']);const input=z.object({name:z.string().trim().min(3).max(100),body:z.string().min(40).max(20000)}).strict().parse(body);render(input.body,Object.fromEntries(allowed.map(k=>[k,k])));
@@ -45,13 +163,13 @@ class ContractController{
  }
  @Post('contracts')async create(@Req()req:any,@Body()body:unknown){
   const actor=await authorize(req,'contract',['ADMIN','HR']);const input=draft.parse(body);const employee=await employeeSnapshot(input.employeeId,actor);
-  return db.$transaction(async tx=>{if(input.requestKey){await contractLock(tx,'create:'+actor.id+input.requestKey);const existing=await tx.contract.findUnique({where:{createdBy_requestKey:{createdBy:actor.id,requestKey:input.requestKey}}});if(existing){assertScope(actor,existing.snapshot);if(existing.employeeId!==input.employeeId||existing.templateId!==input.templateId||existing.probationDays!==input.probationDays)throw new ConflictException('La clave del intento ya corresponde a otro borrador');return existing}}await tx.template.findFirstOrThrow({where:{id:input.templateId,active:true}});const c=await tx.contract.create({data:{...input,snapshot:employee,createdBy:actor.id}});await audit(tx,req,actor.id,c.id,'DRAFT_CREATED');return c});
+  return db.$transaction(async tx=>{if(input.requestKey){await contractLock(tx,'create:'+actor.id+input.requestKey);const existing=await tx.contract.findUnique({where:{createdBy_requestKey:{createdBy:actor.id,requestKey:input.requestKey}}});if(existing){assertScope(actor,existing.snapshot);if(existing.employeeId!==input.employeeId||existing.templateId!==input.templateId||existing.probationDays!==input.probationDays)throw new ConflictException('La clave del intento ya corresponde a otro borrador');return existing}}const t=await resolveTemplate(tx,input.templateId);if(!t.active)throw new ConflictException('La plantilla está desactivada; seleccione una versión activa');const c=await tx.contract.create({data:{...input,snapshot:employee,createdBy:actor.id}});await audit(tx,req,actor.id,c.id,'DRAFT_CREATED');return c});
  }
  @Patch('contracts/:id')async edit(@Req()req:any,@Param('id')id:string,@Body()body:unknown){
   const actor=await authorize(req,'contract',['ADMIN','HR']);const input=z.object({templateId:uuid,probationDays:z.number().int().min(0).max(365),version:z.number().int().positive(),refreshSnapshot:z.boolean()}).strict().parse(body);uuid.parse(id);const old=await db.contract.findUniqueOrThrow({where:{id}});assertScope(actor,old.snapshot);draftOnly(old);const snapshot=input.refreshSnapshot?await employeeSnapshot(old.employeeId,actor):old.snapshot;
-  return db.$transaction(async tx=>{await contractLock(tx,id);const c=await tx.contract.findUniqueOrThrow({where:{id}});assertScope(actor,c.snapshot);draftOnly(c);if(c.version!==input.version)throw new ConflictException('El borrador cambió; recargue antes de guardar');await tx.template.findFirstOrThrow({where:{id:input.templateId,active:true}});const result=await tx.contract.update({where:{id},data:{templateId:input.templateId,probationDays:input.probationDays,snapshot:snapshot as Prisma.InputJsonValue,status:'BORRADOR',fileHash:null,version:{increment:1}}});await audit(tx,req,actor.id,id,'DRAFT_UPDATED',{snapshotRefreshed:input.refreshSnapshot,version:result.version});return result});
+  return db.$transaction(async tx=>{await contractLock(tx,id);const c=await tx.contract.findUniqueOrThrow({where:{id}});assertScope(actor,c.snapshot);draftOnly(c);if(c.version!==input.version)throw new ConflictException('El borrador cambió; recargue antes de guardar');const t=await resolveTemplate(tx,input.templateId);if(!t.active)throw new ConflictException('La plantilla está desactivada; seleccione una versión activa');const result=await tx.contract.update({where:{id},data:{templateId:input.templateId,probationDays:input.probationDays,snapshot:snapshot as Prisma.InputJsonValue,status:'BORRADOR',fileHash:null,version:{increment:1}}});await audit(tx,req,actor.id,id,'DRAFT_UPDATED',{snapshotRefreshed:input.refreshSnapshot,version:result.version});return result});
  }
- @Get('contracts/:id/preview')async preview(@Req()req:any,@Param('id')id:string){const actor=await authorize(req,'contract',['ADMIN','HR']);const c=await db.contract.findUniqueOrThrow({where:{id:uuid.parse(id)}});assertScope(actor,c.snapshot);const t=await db.template.findUniqueOrThrow({where:{id:c.templateId}});return {text:render(t.body,{...c.snapshot as any,probationDays:c.probationDays}),templateVersion:t.version,templateName:t.name,status:c.status,contract:c}}
+ @Get('contracts/:id/preview')async preview(@Req()req:any,@Param('id')id:string){const actor=await authorize(req,'contract',['ADMIN','HR']);const c=await db.contract.findUniqueOrThrow({where:{id:uuid.parse(id)}});assertScope(actor,c.snapshot);const t=await resolveTemplate(db,c.templateId);return {text:renderAnyTemplate(t,c.snapshot,c.probationDays),templateVersion:t.version,templateName:t.name,status:c.status,contract:c}}
  @Get('contracts/:id/audit')async history(@Req()req:any,@Param('id')id:string){const actor=await authorize(req,'contract',['ADMIN','HR']);const c=await db.contract.findUniqueOrThrow({where:{id:uuid.parse(id)}});assertScope(actor,c.snapshot);return db.contractAudit.findMany({where:{resourceId:id},orderBy:{createdAt:'asc'}})}
  @Post('contracts/:id/issue')async issue(@Req()req:any,@Param('id')id:string){
   const actor=await authorize(req,'contract',['ADMIN','HR']);requirePermission(actor,'contracts.issue');uuid.parse(id);
@@ -63,10 +181,10 @@ class ContractController{
    if(['EMITIDO','ANULADO'].includes(c.status)){if(c.status==='ANULADO')throw new ConflictException('Contrato anulado');await historicalPdf(c);return c}
    if(![...editable,'EMITIENDO'].includes(c.status))throw new ConflictException('Estado no emitible');
    const e=await employeeSnapshot(c.employeeId,actor);if(e.version!==(c.snapshot as any).version)throw new ConflictException('La ficha cambió desde el borrador; actualice sus datos antes de emitir');
-   const t=await tx.template.findUniqueOrThrow({where:{id:c.templateId}});if(!t.active)throw new ConflictException('La plantilla está desactivada; seleccione una versión activa');
+   const t=await resolveTemplate(tx,c.templateId);if(!t.active)throw new ConflictException('La plantilla está desactivada; seleccione una versión activa');
    if(c.originalId){const policy=await tx.contractPolicy.findFirst({orderBy:{approvedAt:'desc'}});if(!policy?.allowRectification)throw new ConflictException('Requiere política de rectificación aprobada')}
    await tx.contract.update({where:{id},data:{status:'EMITIENDO'}});
-   const fileHash=await generatePdf(id,'Contrato · '+id,[`Plantilla ${t.name} · versión ${t.version}`,...(c.originalId?[`Rectifica el documento ${c.originalId}`]:[]),render(t.body,{...c.snapshot as any,probationDays:c.probationDays})]);await readPdf(id,fileHash);
+   const fileHash=await generatePdf(id,'Contrato · '+id,[`Plantilla ${t.name} · versión ${t.version}`,...(c.originalId?[`Rectifica el documento ${c.originalId}`]:[]),renderAnyTemplate(t,c.snapshot,c.probationDays)]);await readPdf(id,fileHash);
    const result=await tx.contract.update({where:{id},data:{status:'EMITIDO',fileHash,issuedAt:new Date(),version:{increment:1}}});await audit(tx,req,actor.id,id,c.status==='EMITIENDO'?'ISSUE_RECOVERED':'ISSUED',{fileHash,templateVersion:t.version,originalId:c.originalId});return result;
   })}catch(error){if(error instanceof HttpException)throw error;await db.contract.updateMany({where:{id,status:{in:[...editable,'EMITIENDO']}},data:{status:'ERROR_EMISION'}}).catch(()=>{});throw new BadRequestException('No se completó la emisión; el borrador se conserva y puede reintentar')}
  }

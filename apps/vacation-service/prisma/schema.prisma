@@ -36,6 +36,7 @@ model LeaveRequest {
  reason String?
  policyId String
  createdAt DateTime @default(now()) @db.Timestamptz
+ @@index([employeeId, status, startsAt, endsAt])
 }
 model Outbox {
  id String @id @default(uuid())

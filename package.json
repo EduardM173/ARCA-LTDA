@@ -13,10 +13,16 @@
     "build": "node scripts/build.mjs",
     "dev": "node scripts/dev.mjs",
     "bootstrap": "node --env-file=.env scripts/local-bootstrap.mjs",
-    "demo:seed": "node --env-file=.env scripts/demo-local.mjs seed && node --env-file=.env scripts/demo-flows.mjs seed && node --env-file=.env scripts/demo-history.mjs && node scripts/demo-refresh-drafts.mjs",
+    "demo:seed": "node --env-file=.env scripts/demo-local.mjs seed && node --env-file=.env scripts/demo-flows.mjs seed && node --env-file=.env scripts/demo-history.mjs && node --env-file=.env scripts/demo-refresh-drafts.mjs",
     "demo:verify": "node --env-file=.env scripts/demo-local.mjs verify && node --env-file=.env scripts/demo-flows.mjs verify",
     "demo:reset": "node --env-file=.env scripts/demo-reset.mjs",
-    "test": "node --env-file=.env tests/integration.mjs"
+    "test": "node --env-file=.env tests/integration.mjs",
+    "test:hu16": "node --import tsx tests/hu16-vacation-request.spec.ts",
+    "test:hu17": "node --import tsx tests/hu17-vacation-decision.spec.ts",
+    "test:hu18": "node --import tsx tests/hu18-contract-templates.spec.ts",
+    "test:hu19": "node --import tsx tests/hu19-contract-drafts.spec.ts",
+    "test:hu20": "node --import tsx tests/hu20-contract-issue.spec.ts",
+    "test:hu21": "node --import tsx tests/hu21-payment-drafts.spec.ts"
   },
   "dependencies": {
     "@nestjs/common": "11.2.8",

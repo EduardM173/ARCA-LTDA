@@ -59,8 +59,8 @@ class Errors implements ExceptionFilter{
  res.status(status).json({code:status,message,...(error instanceof ZodError?{fields:Object.fromEntries(error.issues.map(i=>[i.path.join('.'),i.message]))}:{}),requestId:res.getHeader('X-Request-Id')});
  }
 }
-export async function start(controller:any,name:string,port:number,db?:any){
- @Module({controllers:[controller]}) class App{}
+export async function start(controller:any,name:string,port:number,db?:any,providers:any[]=[]){
+ @Module({controllers:[controller],providers}) class App{}
  const app=await NestFactory.create(App,new ExpressAdapter(),{logger:['error','warn']});
  app.use(helmet());app.use(cookieParser());
  app.use((req:any,res:any,next:any)=>{const incoming=req.headers['x-request-id'];const requestId=name!=='gateway'&&typeof incoming==='string'&&requestIdPattern.test(incoming)?incoming:randomUUID();req.headers['x-request-id']=requestId;res.setHeader('X-Request-Id',requestId);res.setHeader('Cache-Control','no-store');requestContext.run({requestId},next)});
