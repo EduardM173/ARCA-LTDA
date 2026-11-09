@@ -87,6 +87,7 @@ export class VacationsService {
     const diffMs = today.getTime() - hire.getTime();
     const diasAntiguedad = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
     const tenureKey = e.hiredAt.slice(0, 10);
+    const policy = await tx.policy.findFirst({ orderBy: { approvedAt: 'desc' } });
 
     // Caso: Funcionario dado de baja
     if (e.status !== 'ACTIVO') {
@@ -106,6 +107,7 @@ export class VacationsService {
         employeeVersion: e.version,
         departmentId: e.departmentId,
         tenureKey,
+        policy: policy || undefined,
       };
     }
 
@@ -127,6 +129,7 @@ export class VacationsService {
         employeeVersion: e.version,
         departmentId: e.departmentId,
         tenureKey,
+        policy: policy || undefined,
       };
     }
 
@@ -148,12 +151,12 @@ export class VacationsService {
         employeeVersion: e.version,
         departmentId: e.departmentId,
         tenureKey,
+        policy: policy || undefined,
       };
     }
 
     // Regla 4 (T07): Ratificado con >= 365 días de antigüedad
     const gestiones = Math.floor(diasAntiguedad / 365);
-    const policy = await tx.policy.findFirst({ orderBy: { approvedAt: 'desc' } });
     if (!policy) {
       throw new ConflictException('Requiere configurar y aprobar la política de vacaciones');
     }

@@ -1,4 +1,30 @@
 import React,{useEffect,useState}from'react';import{createRoot}from'react-dom/client';import{api,Row}from'./api';import{Action,Form,Notice,today,useData}from'./components';import {Personnel} from './Personnel';import Vacations from './Vacations';import Contracts from './Contracts';import {Payments} from './Payments';import Administration from './Administration';import Account from './Account';import './style.css';
+
+class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean; error: string}> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: '' };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error: error.message };
+  }
+  componentDidCatch(error: Error, info: any) {
+    console.error('ErrorBoundary caught an unhandled error:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <section className="card notice error" role="alert" style={{ margin: 20 }}>
+          <h3>Ocurrió un error en la vista</h3>
+          <p>{this.state.error}</p>
+          <button className="primary" onClick={() => this.setState({ hasError: false, error: '' })}>Reintentar vista</button>
+        </section>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 type User={id:string;email:string;roles:string[];permissions:string[];scopeAll:boolean;departmentIds:string[];verifiedAt?:string|null};
 function App(){const[user,setUser]=useState<User|null>(null),[ready,setReady]=useState(false),[tab,setTab]=useState('Inicio'),[rev,setRev]=useState(0),[employeeId,setEmployeeId]=useState(''),[recover,setRecover]=useState(false),[destination,setDestination]=useState(''),[logoutPending,setLogoutPending]=useState(false),[mobileMenu,setMobileMenu]=useState(false);const has=(...r:string[])=>!!user?.roles.some(v=>r.includes(v)),refresh=()=>setRev(n=>n+1);
  useEffect(()=>{api('auth/me').then(data=>setUser(data as User)).catch(()=>{}).finally(()=>setReady(true))},[]);
@@ -14,12 +40,12 @@ function App(){const[user,setUser]=useState<User|null>(null),[ready,setReady]=us
  const nav=[['Inicio',true],['Personal',has('ADMIN','HR')],['Vacaciones',has('ADMIN','HR','APPROVER')],['Contratos',has('ADMIN','HR')],['Boletas',has('FINANCE')],['Administración',has('ADMIN')||has('FINANCE')&&!!user.scopeAll],['Mi cuenta',true]];const cards=[{label:'Personal registrado',source:personal,value:personal.data?.total,allowed:has('ADMIN','HR','BOARD'),hint:'Todos los estados',go:'Personal'},{label:'Vacaciones pendientes',source:leave,value:leave.data?.byStatus.PENDIENTE||0,allowed:has('ADMIN','HR','APPROVER','BOARD'),hint:'Solicitudes por decidir',go:'Vacaciones'},{label:'Contratos emitidos',source:contracts,value:contracts.data?.byStatus.EMITIDO||0,allowed:has('ADMIN','HR','BOARD'),hint:'Documentos conservados',go:'Contratos'},{label:'Boletas del periodo',source:payments,value:payments.data?.total,allowed:has('FINANCE','BOARD'),hint:payments.data?.period||'Periodo actual',go:'Boletas'}];
  return <div className="shell"><aside><div className="aside-heading"><div className="wordmark">A<span>ARCA / RH<small>GESTIÓN DE PERSONAS</small></span></div><button className="mobile-menu-toggle" aria-expanded={mobileMenu} aria-controls="module-nav" onClick={()=>setMobileMenu(v=>!v)}>{mobileMenu?'Cerrar menú':'Menú'}</button></div><p className="nav-label">ESPACIO DE TRABAJO</p><nav id="module-nav" className={mobileMenu?'mobile-open':''} aria-label="Módulos">{nav.filter(n=>n[1]).map(([name])=><button key={String(name)} className={tab===name?'selected':''} onClick={()=>navigate(String(name))}><span aria-hidden="true">◇</span>{name}</button>)}</nav><div className="aside-bottom"><span className="avatar">{user.email[0].toUpperCase()}</span><div><strong>{user.email.split('@')[0]}</strong><small>{user.roles.join(' · ')}</small></div></div></aside>{mobileMenu&&<button className="mobile-menu-backdrop" aria-label="Cerrar menú" onClick={()=>setMobileMenu(false)}/>}<div className="workspace"><header><span>Organización <b>/</b> {tab}</span><Action run={async()=>{if(document.querySelector('form[data-dirty="true"]')){setLogoutPending(true);return}await logout()}}>Cerrar sesión ↗</Action></header><main className="content"><div className="page-heading"><div><p className="eyebrow">ARCA LTDA. / RECURSOS HUMANOS</p><h1>{tab==='Inicio'?'Inicio':tab}</h1><p className="muted">{tab==='Inicio'?'Tu organización, con información de los registros actuales.':'Información conectada, decisiones con contexto.'}</p></div><button onClick={refresh}>↻ Actualizar</button></div>
  {tab==='Inicio'&&<><div className="welcome"><div><span className="eyebrow">TU EQUIPO, EN PERSPECTIVA</span><h2>Resumen de trabajo</h2><p>Indicadores actuales según tus permisos.</p></div><div className="welcome-art" aria-hidden="true">A<span>RH</span></div></div><div className="stats">{cards.filter(c=>c.allowed).map(c=><article key={c.label}><span>{c.label}</span><strong>{c.source.error?'No disponible':c.source.loading?'…':c.value??'No disponible'}</strong><small>{c.hint}{c.source.loadedAt?` · consultado ${new Date(c.source.loadedAt).toLocaleString('es-BO',{timeZone:'America/La_Paz',dateStyle:'short',timeStyle:'short'})}`:''}</small><Notice error={c.source.error}/></article>)}</div><section className="card"><h3>Tu próxima tarea</h3>{personal.data?.total===0&&has('ADMIN','HR')?<><p className="muted">Aún no hay funcionarios registrados. Comienza por las áreas y cargos; después registra el primer funcionario.</p><div className="actions">{has('ADMIN')&&<button className="primary" onClick={()=>navigate('Administración')}>Configurar áreas y cargos →</button>}<button onClick={()=>navigate('Personal')}>Registrar funcionario →</button></div></>:<><p className="muted">{leave.data?.byStatus?.PENDIENTE&&has('APPROVER')?`Hay ${leave.data.byStatus.PENDIENTE} solicitudes pendientes de revisión.`:'Continúa con las operaciones autorizadas para tu perfil.'}</p><div className="actions">{leave.data?.byStatus?.PENDIENTE&&has('APPROVER')?<button className="primary" onClick={()=>navigate('Vacaciones')}>Revisar solicitudes →</button>:null}{has('ADMIN','HR')&&<button onClick={()=>navigate('Personal')}>Consultar personal →</button>}{has('FINANCE')&&<button onClick={()=>navigate('Boletas')}>Preparar boletas →</button>}</div></>}</section></>}
- {tab==='Personal'&&<Personnel user={user} employeeId={employeeId} onEmployeeChange={setEmployeeId} onNavigate={navigate} onChanged={refresh}/>}
+ <ErrorBoundary>{tab==='Personal'&&<Personnel user={user} employeeId={employeeId} onEmployeeChange={setEmployeeId} onNavigate={navigate} onChanged={refresh}/>}
  {tab==='Vacaciones'&&<Vacations user={user} employeeId={employeeId} onEmployeeChange={setEmployeeId} onChanged={refresh}/>}
  {tab==='Contratos'&&<Contracts employeeId={employeeId} onEmployeeChange={setEmployeeId} canAdmin={has('ADMIN')} canIssue={user.permissions.includes('contracts.issue')} onChanged={refresh}/>}
  {tab==='Boletas'&&<Payments employeeId={employeeId} onEmployeeChange={setEmployeeId}/>}
  {tab==='Administración'&&<Administration user={user} onChanged={refresh}/>}
- {tab==='Mi cuenta'&&<Account user={user} onLoggedOut={()=>setUser(null)}/>}
+ {tab==='Mi cuenta'&&<Account user={user} onLoggedOut={()=>setUser(null)}/>}</ErrorBoundary>
  <footer>ARCA RH · Gestión de personas <span>Información de tu organización · {new Date().getFullYear()}</span></footer></main></div>{destination&&<div role="dialog" aria-modal="true" aria-labelledby="unsaved-title" className="unsaved"><h2 id="unsaved-title">Cambios sin guardar</h2><p>Hay un formulario modificado. ¿Deseas salir de esta pantalla?</p><button onClick={()=>setDestination('')}>Seguir editando</button><button onClick={()=>{setTab(destination);setDestination('')}}>Descartar y continuar</button></div>}{logoutPending&&<div role="dialog" aria-modal="true" aria-labelledby="logout-unsaved-title" className="unsaved"><h2 id="logout-unsaved-title">Cambios sin guardar</h2><p>Hay un formulario modificado. ¿Deseas cerrar la sesión?</p><button onClick={()=>setLogoutPending(false)}>Seguir editando</button><Action run={logout}>Descartar y cerrar sesión</Action></div>}</div>;
 }
 createRoot(document.getElementById('root')!).render(<App/>);
