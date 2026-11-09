@@ -12,25 +12,117 @@ function Approval({title,children,submit,onSubmit,onClose}:{title:string;childre
 
 export function Payments({employeeId,onEmployeeChange}:{employeeId:string;onEmployeeChange:(id:string)=>void}){
  const[revision,setRevision]=useState(0),[search,setSearch]=useState(''),[page,setPage]=useState(1),[filterPeriod,setFilterPeriod]=useState(''),[filterStatus,setFilterStatus]=useState(''),[editor,setEditor]=useState<Row|null>(null),[create,setCreate]=useState(false),[period,setPeriod]=useState(today().slice(0,7)),[lines,setLines]=useState<Line[]>([]),[error,setError]=useState(''),[busy,setBusy]=useState(false),[success,setSuccess]=useState(''),[dialog,setDialog]=useState<{action:string;payment:Row}|null>(null),[confirmClose,setConfirmClose]=useState(false),[manage,setManage]=useState(false),[history,setHistory]=useState<string|null>(null);
+ const [draftEmployeeId, setDraftEmployeeId] = useState(employeeId);
+ const [draftEmpSearch, setDraftEmpSearch] = useState('');
  const draftDialog=useRef<HTMLDialogElement>(null);useEffect(()=>{if((create||editor)&&draftDialog.current&&!draftDialog.current.open)draftDialog.current.showModal()},[create,editor]);
  const refresh=()=>setRevision(n=>n+1);
  const people=useData('employees?page=1&q='+encodeURIComponent(search),revision),concepts=useData('payments/concepts',revision),policy=useData('payments/policy',revision),events=useData(history?'payments/'+history+'/history':null,revision);
+ const draftPeople=useData(create && !editor ? 'employees?page=1&q='+encodeURIComponent(draftEmpSearch) : null, revision);
  const params=new URLSearchParams({page:String(page)});if(employeeId)params.set('employeeId',employeeId);if(filterPeriod)params.set('period',filterPeriod);if(filterStatus)params.set('status',filterStatus);
  const records=useData('payments?'+params,revision);
- function open(p:Row|null){setEditor(p);setCreate(!p);setPeriod(p?.period||today().slice(0,7));setLines(p?(p.lines as Row[]).map(l=>({conceptId:l.conceptId,amount:l.amount})):[]);setError('');setSuccess('')}
+ function open(p:Row|null){setEditor(p);setCreate(!p);setDraftEmployeeId(p?.employeeId||employeeId);setDraftEmpSearch('');setPeriod(p?.period||today().slice(0,7));setLines(p?(p.lines as Row[]).map(l=>({conceptId:l.conceptId,amount:l.amount})):[]);setError('');setSuccess('')}
  const active=(concepts.data||[]).filter((c:Row)=>c.active);
  const selectedPerson=useData(employeeId?'employees?id='+encodeURIComponent(employeeId):null,revision);
+ const draftSelectedPerson=useData(draftEmployeeId?'employees?id='+encodeURIComponent(draftEmployeeId):null,revision);
  const employeeRows:Row[]=[...(people.data?.items||[])];
  if(employeeId&&!employeeRows.some(e=>e.id===employeeId)){const selected=selectedPerson.data?.items?.find((e:Row)=>e.id===employeeId);employeeRows.push(selected||{id:employeeId,code:'',name:selectedPerson.error?'Funcionario seleccionado no disponible':'Consultando funcionario seleccionado…'})}
+ const modalEmployeeRows:Row[]=[...(draftPeople.data?.items||people.data?.items||[])];
+ if(draftEmployeeId&&!modalEmployeeRows.some(e=>e.id===draftEmployeeId)){const sel=draftSelectedPerson.data?.items?.find((e:Row)=>e.id===draftEmployeeId)||selectedPerson.data?.items?.find((e:Row)=>e.id===draftEmployeeId);modalEmployeeRows.push(sel||{id:draftEmployeeId,code:'',name:'Funcionario seleccionado'})}
  return <>
   <section className="card"><div className="toolbar"><div><h2>Boletas y pagos</h2><p className="muted">Los importes y documentos se guardan en PostgreSQL. Un pago simulado no acredita transferencia bancaria.</p></div><button className="primary" disabled={!concepts.data||!active.length||(!people.data?.total&&!employeeId)} onClick={()=>open(null)}>+ Preparar boleta</button></div>
    <div className="fields"><label>Buscar funcionario<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Nombre o código"/></label><label>Funcionario<select value={employeeId} onChange={e=>{onEmployeeChange(e.target.value);setPage(1)}}><option value="">Todos los funcionarios autorizados</option>{employeeRows.map((p:Row)=><option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}</select></label><label>Periodo<input type="month" value={filterPeriod} onChange={e=>{setFilterPeriod(e.target.value);setPage(1)}}/></label><label>Estado<select value={filterStatus} onChange={e=>{setFilterStatus(e.target.value);setPage(1)}}><option value="">Todos los estados</option>{['BORRADOR','ERROR_EMISION','EMITIENDO','EMITIDO','PAGADO','ANULADO','RECTIFICADO'].map(s=><option key={s} value={s}>{s.replaceAll('_',' ')}</option>)}</select></label></div>
+   {search.trim() && (
+     <div className="search-results-box" style={{ marginTop: 10, marginBottom: 12, padding: '10px 14px', background: '#f8faf9', border: '1px solid #dce5df', borderRadius: 8 }}>
+       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+         <small style={{ fontWeight: 600, color: '#194e40' }}>
+           {people.loading ? 'Buscando…' : `${people.data?.total || 0} funcionario(s) encontrado(s) para "${search}":`}
+         </small>
+         <button type="button" className="text" style={{ padding: 0, fontSize: 12, cursor: 'pointer' }} onClick={() => setSearch('')}>
+           Limpiar búsqueda ✕
+         </button>
+       </div>
+       {people.loading && <p className="muted" style={{ margin: 0, fontSize: 13 }}>Consultando registros…</p>}
+       {!people.loading && people.data?.items?.length === 0 && (
+         <p className="notice" style={{ margin: 0, fontSize: 13 }}>
+           No se encontró ningún funcionario que coincida con "{search}".
+         </p>
+       )}
+       {!people.loading && (people.data?.items?.length || 0) > 0 && (
+         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+           {people.data.items.map((e: Row) => (
+             <button
+               type="button"
+               key={e.id}
+               className={employeeId === e.id ? 'primary' : ''}
+               style={{ padding: '6px 12px', fontSize: 13, borderRadius: 6, cursor: 'pointer', textAlign: 'left' }}
+               onClick={() => {
+                 onEmployeeChange(e.id);
+               }}
+             >
+               <strong>{e.code}</strong> · {e.name}
+             </button>
+           ))}
+         </div>
+       )}
+     </div>
+   )}
    <Notice {...people}/><Notice error={selectedPerson.error}/>{people.data?.total===0&&!employeeId&&<p className="notice">{search?'No hay funcionarios para esta búsqueda.':'No hay funcionarios disponibles. Solicite a RR. HH. que registre y autorice una ficha.'}</p>}{concepts.data&&!active.length&&<p className="notice">No hay conceptos activos. Configure al menos uno antes de preparar boletas.</p>}<div className="actions"><button onClick={()=>{onEmployeeChange('');setFilterPeriod('');setFilterStatus('');setSearch('');setPage(1)}}>Limpiar filtros</button><button onClick={()=>setManage(!manage)}>{manage?'Cerrar configuración':'Conceptos y políticas'}</button></div>
   </section>
   {success&&<p className="success" role="status">{success}</p>}
-  {(create||editor)&&<dialog ref={draftDialog} className="form-dialog" aria-label="Borrador de boleta" onCancel={e=>{e.preventDefault();if(draftDialog.current?.querySelector('form[data-dirty="true"]'))setConfirmClose(true);else{setEditor(null);setCreate(false)}}}><form onSubmit={async e=>{e.preventDefault();const form=e.currentTarget;if(!employeeId&&!editor){setError('Seleccione el funcionario antes de guardar');return}setBusy(true);setError('');try{const saved=editor?await api('payments/'+editor.id,'PATCH',{version:editor.version,lines}):await api('payments','POST',{employeeId,period,lines});setEditor(null);setCreate(false);refresh();setSuccess('Borrador '+saved.id+' guardado. Revise los importes antes de emitir.');form.dataset.dirty='false'}catch(e){setError((e as Error).message)}finally{setBusy(false)}}}>
+  {(create||editor)&&<dialog ref={draftDialog} className="form-dialog" aria-label="Borrador de boleta" onCancel={e=>{e.preventDefault();if(draftDialog.current?.querySelector('form[data-dirty="true"]'))setConfirmClose(true);else{setEditor(null);setCreate(false)}}}><form onSubmit={async e=>{e.preventDefault();const form=e.currentTarget;const targetEmpId=editor?editor.employeeId:(draftEmployeeId||employeeId);if(!targetEmpId&&!editor){setError('Seleccione el funcionario antes de guardar');return}setBusy(true);setError('');try{const saved=editor?await api('payments/'+editor.id,'PATCH',{version:editor.version,lines}):await api('payments','POST',{employeeId:targetEmpId,period,lines});setEditor(null);setCreate(false);refresh();setSuccess('Borrador '+saved.id+' guardado. Revise los importes antes de emitir.');form.dataset.dirty='false'}catch(e){setError((e as Error).message)}finally{setBusy(false)}}}>
    <div className="toolbar"><h3>{editor?'Editar borrador · '+editor.snapshot.name:'Nueva boleta'}</h3><button type="button" onClick={e=>{if(e.currentTarget.closest('form')?.dataset.dirty==='true')setConfirmClose(true);else{setEditor(null);setCreate(false)}}}>Cerrar borrador</button></div>
    <p className="muted">El salario se consulta a Personal para el periodo. Guardar un borrador existente actualiza su ficha y remuneración; no altera PDFs emitidos.</p>
+   {!editor && (
+     <div style={{ marginBottom: 16 }}>
+       <label>Funcionario para la boleta
+         <input
+           value={draftEmpSearch}
+           onChange={e=>setDraftEmpSearch(e.target.value)}
+           placeholder="Buscar funcionario por nombre o código…"
+           style={{ width: '100%', marginTop: 4, marginBottom: 6 }}
+         />
+       </label>
+       {draftEmpSearch.trim() && (
+         <div className="search-results-box" style={{ marginBottom: 10, padding: '8px 12px', background: '#f8faf9', border: '1px solid #dce5df', borderRadius: 8 }}>
+           <small style={{ fontWeight: 600, color: '#194e40' }}>
+             {draftPeople.loading ? 'Buscando…' : `${draftPeople.data?.total || 0} funcionario(s) encontrado(s):`}
+           </small>
+           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+             {draftPeople.data?.items?.map((e: Row) => (
+               <button
+                 type="button"
+                 key={e.id}
+                 className={draftEmployeeId === e.id ? 'primary' : ''}
+                 style={{ padding: '4px 10px', fontSize: 13, borderRadius: 6, cursor: 'pointer', textAlign: 'left' }}
+                 onClick={() => {
+                   setDraftEmployeeId(e.id);
+                   onEmployeeChange(e.id);
+                 }}
+               >
+                 <strong>{e.code}</strong> · {e.name}
+               </button>
+             ))}
+           </div>
+         </div>
+       )}
+       <select
+         value={draftEmployeeId}
+         required
+         onChange={e => {
+           setDraftEmployeeId(e.target.value);
+           onEmployeeChange(e.target.value);
+         }}
+         style={{ width: '100%', padding: '8px 10px' }}
+       >
+         <option value="">Seleccione funcionario…</option>
+         {modalEmployeeRows.map((p: Row) => (
+           <option key={p.id} value={p.id}>
+             {p.code} · {p.name}
+           </option>
+         ))}
+       </select>
+     </div>
+   )}
    <label>Periodo<input type="month" value={period} onChange={e=>setPeriod(e.target.value)} required disabled={!!editor}/></label>
    <h3 style={{marginTop:24}}>Abonos y descuentos</h3><Notice {...concepts}/>
    {lines.map((l,i)=><div className="fields" key={i}><label>Concepto {i+1}<select value={l.conceptId} required onChange={e=>setLines(lines.map((v,j)=>j===i?{...v,conceptId:e.target.value}:v))}><option value="">Seleccione un concepto activo</option>{active.map((c:Row)=><option key={c.id} value={c.id}>{c.type} · {c.name}</option>)}</select></label><label>Importe<input type="number" min="0" step="0.01" required value={l.amount} onChange={e=>setLines(lines.map((v,j)=>j===i?{...v,amount:e.target.value}:v))}/></label><button type="button" onClick={e=>{e.currentTarget.closest('form')!.dataset.dirty='true';setLines(lines.filter((_,j)=>j!==i))}}>Quitar partida {i+1}</button></div>)}
