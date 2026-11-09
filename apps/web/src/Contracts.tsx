@@ -28,7 +28,42 @@ export default function Contracts({employeeId,onEmployeeChange,canAdmin,canIssue
  const employeeRows:Row[]=[...(people.data?.items||[])];
  if(employeeId&&!employeeRows.some(e=>e.id===employeeId)){const selected=selectedPerson.data?.items?.find((e:Row)=>e.id===employeeId);employeeRows.push(selected||{id:employeeId,code:'',name:selectedPerson.error?'Funcionario seleccionado no disponible':'Consultando funcionario seleccionado…'})}
  return <div className="management-surface">
-  <section className="card"><h3>Preparar un contrato</h3><p className="muted">Selecciona un funcionario existente. Se conservarán sus datos al momento de preparar el borrador.</p><div className="employee-picker"><label>Buscar funcionario<input value={search} onChange={e=>{setSearch(e.target.value);setEmployeePage(1)}} placeholder="Nombre o código"/></label><label>Funcionario<select value={employeeId} onChange={e=>onEmployeeChange(e.target.value)}><option value="">Seleccione…</option>{employeeRows.map((e:Row)=><option key={e.id} value={e.id}>{e.code} · {e.name}</option>)}</select></label></div><Notice {...people}/><Notice error={selectedPerson.error}/><div className="pagination"><button disabled={employeePage<=1} onClick={()=>setEmployeePage(n=>n-1)}>Anterior</button><span>Página {employeePage} · {people.data?.total??'…'} funcionarios</span><button disabled={employeePage*25>=(people.data?.total||0)} onClick={()=>setEmployeePage(n=>n+1)}>Siguiente</button></div>
+  <section className="card"><h3>Preparar un contrato</h3><p className="muted">Selecciona un funcionario existente. Se conservarán sus datos al momento de preparar el borrador.</p><div className="employee-picker"><label>Buscar funcionario<input value={search} onChange={e=>{setSearch(e.target.value);setEmployeePage(1)}} placeholder="Nombre o código"/></label><label>Funcionario<select value={employeeId} onChange={e=>onEmployeeChange(e.target.value)}><option value="">Seleccione…</option>{employeeRows.map((e:Row)=><option key={e.id} value={e.id}>{e.code} · {e.name}</option>)}</select></label></div>
+    {search.trim() && (
+        <div className="search-results-box" style={{ marginTop: 10, padding: '10px 14px', background: '#f8faf9', border: '1px solid #dce5df', borderRadius: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <small style={{ fontWeight: 600, color: '#194e40' }}>
+              {people.loading ? 'Buscando…' : `${people.data?.total || 0} funcionario(s) encontrado(s) para "${search}":`}
+            </small>
+            <button type="button" className="text" style={{ padding: 0, fontSize: 12, cursor: 'pointer' }} onClick={() => setSearch('')}>
+              Limpiar búsqueda ✕
+            </button>
+          </div>
+          {people.loading && <p className="muted" style={{ margin: 0, fontSize: 13 }}>Consultando registros…</p>}
+          {!people.loading && people.data?.items?.length === 0 && (
+            <p className="notice" style={{ margin: 0, fontSize: 13 }}>
+              No se encontró ningún funcionario que coincida con "{search}".
+            </p>
+          )}
+          {!people.loading && (people.data?.items?.length || 0) > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+              {people.data.items.map((e: Row) => (
+                <button
+                  type="button"
+                  key={e.id}
+                  className={employeeId === e.id ? 'primary' : ''}
+                  style={{ padding: '6px 12px', fontSize: 13, borderRadius: 6, cursor: 'pointer', textAlign: 'left' }}
+                  onClick={() => {
+                    onEmployeeChange(e.id);
+                  }}
+                >
+                  <strong>{e.code}</strong> · {e.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}<Notice {...people}/><Notice error={selectedPerson.error}/><div className="pagination"><button disabled={employeePage<=1} onClick={()=>setEmployeePage(n=>n-1)}>Anterior</button><span>Página {employeePage} · {people.data?.total??'…'} funcionarios</span><button disabled={employeePage*25>=(people.data?.total||0)} onClick={()=>setEmployeePage(n=>n+1)}>Siguiente</button></div>
    {employeeId&&templateOptions.length>0&&<Form title="Nuevo borrador" fields={[{name:'templateId',label:'Plantilla activa',options:templateOptions},{name:'probationDays',label:'Periodo de prueba (días)',type:'number'}]} submit="Guardar borrador" onSubmit={async v=>{const c=await api('contracts','POST',{employeeId,templateId:v.templateId,probationDays:Number(v.probationDays),requestKey:requestKey.current});requestKey.current=crypto.randomUUID();setMessage('Borrador '+c.id+' guardado. Puedes revisarlo antes de emitir.');refresh();await open('edit',c)}}/>}<Notice {...templates}/>{templates.data&&!templateOptions.length&&<p className="muted">No hay plantilla activa. Un administrador puede crearla en Plantillas versionadas.</p>}
   </section>
   {message&&<p className="success" role="status">{message}</p>}
