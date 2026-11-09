@@ -21,8 +21,14 @@ export default function Contracts({employeeId,onEmployeeChange,canAdmin,canIssue
  const requestKey=useRef(crypto.randomUUID());
  const refresh=()=>{setRevision(n=>n+1);onChanged?.()};
  const templates=useData('templates',revision),policy=useData('contracts/policy',revision),people=useData(`employees?page=${employeePage}&q=${encodeURIComponent(search)}`,revision);
+ const modernTemplates=useData('contracts/templates?status=ACTIVE',revision);
  const list=useData(`contracts?page=${page}${status?'&status='+status:''}${filterEmployee&&employeeId?'&employeeId='+employeeId:''}`,revision);
- const templateOptions=(templates.data||[]).filter((t:Row)=>t.active).map((t:Row)=>({value:t.id,label:`${t.name} · versión ${t.version}`}));
+ const modernTmpls:Row[]=(modernTemplates.data||[]).filter((t:Row)=>t.status==='ACTIVE');
+ const legacyTmpls:Row[]=(templates.data||[]).filter((t:Row)=>t.active);
+ const templateOptions=[
+   ...modernTmpls.map((t:Row)=>({value:t.id,label:`${t.title} · v${t.version} (HU-18)`})),
+   ...legacyTmpls.map((t:Row)=>({value:t.id,label:`${t.name} · versión ${t.version}`})),
+ ];
  async function open(type:string,c:Row){const data=await api(`contracts/${c.id}/${type==='history'?'audit':'preview'}`);setModal({type,record:type==='history'?c:data.contract,data})}
  const selectedPerson=useData(employeeId?'employees?id='+encodeURIComponent(employeeId):null,revision);
  const employeeRows:Row[]=[...(people.data?.items||[])];
